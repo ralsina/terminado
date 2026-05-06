@@ -8,7 +8,7 @@
 
 #include <Arduino.h>
 
-#define TERM_COLS 80
+#define TERM_COLS 50
 #define TERM_ROWS 30
 #define TERM_BUFFER_SIZE (TERM_COLS * TERM_ROWS)
 

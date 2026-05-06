@@ -15,9 +15,9 @@ BBQ10Keyboard keyboard;
 VT100 vt100;
 
 // Display configuration
-#define TERM_OFFSET_X 80
+#define TERM_OFFSET_X 0
 #define TERM_OFFSET_Y 0
-#define TERM_CELL_WIDTH 8
+#define TERM_CELL_WIDTH 16
 #define TERM_CELL_HEIGHT 16
 
 // Color mapping for ANSI colors
@@ -57,6 +57,7 @@ void setup()
   tft.begin();
   tft.setRotation(2); // Flip screen vertically (180 degree rotation)
   tft.setFont(&fonts::Font0); // Use built-in Font0 for terminal display
+  tft.setTextSize(2); // 2x scaling for better readability
   tft.fillScreen(TFT_BLACK);
 
   // Draw title
@@ -135,10 +136,12 @@ void handleKeyPress(const BBQ10Keyboard::KeyEvent &key) {
 
 void renderTerminal() {
   static char lastScreen[TERM_COLS * TERM_ROWS];
+  static VT100Attr lastAttrs[TERM_COLS * TERM_ROWS];
   static bool initialized = false;
 
   if (!initialized) {
     memset(lastScreen, 0, sizeof(lastScreen));
+    memset(lastAttrs, 0, sizeof(lastAttrs));
     initialized = true;
   }
 
@@ -149,14 +152,23 @@ void renderTerminal() {
     prevCursorY = -1;
   }
 
-  // Only redraw changed characters for efficiency
+  // Only redraw changed characters or attributes for efficiency
   for (int y = 0; y < vt100.rows(); y++) {
     for (int x = 0; x < vt100.cols(); x++) {
       int idx = y * vt100.cols() + x;
       char c = vt100.getChar(x, y);
+      VT100Attr attr = vt100.getAttr(x, y);
 
-      if (c != lastScreen[idx]) {
+      // Check if character or attributes changed
+      if (c != lastScreen[idx] ||
+          attr.fg != lastAttrs[idx].fg ||
+          attr.bg != lastAttrs[idx].bg ||
+          attr.bold != lastAttrs[idx].bold ||
+          attr.underline != lastAttrs[idx].underline ||
+          attr.reverse != lastAttrs[idx].reverse) {
+
         lastScreen[idx] = c;
+        lastAttrs[idx] = attr;
         renderChar(x, y, c);
       }
     }
@@ -190,13 +202,16 @@ void renderChar(int x, int y, char c) {
     fg = brightenColor(fg);
   }
 
-  // Clear character cell
+  // Always fill background first (important for empty cells)
   tft.fillRect(px, py, TERM_CELL_WIDTH, TERM_CELL_HEIGHT, bg);
 
-  // Draw character
-  tft.setCursor(px, py);
-  tft.setTextColor(fg, bg);
-  tft.print(c);
+  // Only draw character if it's not a space
+  if (c != ' ') {
+    // Center character in the cell (Font0 at 2x is 16x16 pixels)
+    tft.setCursor(px, py); // Position at top-left of cell
+    tft.setTextColor(fg, bg);
+    tft.print(c);
+  }
 }
 
 void renderCursor() {

@@ -398,7 +398,7 @@ VT100Attr VT100::getAttr(int x, int y) const {
 void VT100::clearScreen() {
     memset(_screen, ' ', TERM_BUFFER_SIZE);
     for (int i = 0; i < TERM_BUFFER_SIZE; i++) {
-        _attrs[i] = VT100Attr();
+        _attrs[i] = _currentAttr; // Preserve current attributes including background color
     }
     setCursor(0, 0);
 }
