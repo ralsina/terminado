@@ -332,10 +332,16 @@ void VT100::executeCSI(const char* seq, int len) {
             break;
 
         case 'c':  // Device Attributes
-            if (_flag == '?') {
-                // VT100 device attributes response
-                if (_writeCallback) {
-                    const char* response = "\033[?1;2c";
+            if (_writeCallback) {
+                if (_flag == '?') {
+                    // Secondary device attribute request (ESC[?c)
+                    // Respond with VT100 identification: "VT100 with no options"
+                    const char* response = "\033[?1;0c";
+                    _writeCallback(response, strlen(response));
+                } else {
+                    // Primary device attribute request (ESC[c)
+                    // Respond with basic VT100 identification
+                    const char* response = "\033[?0c";
                     _writeCallback(response, strlen(response));
                 }
             }
