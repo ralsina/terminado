@@ -34,6 +34,7 @@ void setup()
 
   //Display Prepare - exactly like working Draw.ino
   tft.begin();
+  tft.setRotation(2); // Flip screen vertically (180 degree rotation)
   tft.fillScreen(TFT_BLACK);
   tft.setTextSize(3);
   delay(100);
