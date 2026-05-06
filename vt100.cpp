@@ -405,7 +405,7 @@ void VT100::newline() {
 void VT100::scrollUp() {
     // Move all lines up by one
     memmove(_screen, _screen + TERM_COLS, (TERM_ROWS - 1) * TERM_COLS);
-    memmove(_attrs, _attrs + TERM_COLS, (TERM_ROWS - 1) * TERM_COLS);
+    memmove(_attrs, _attrs + TERM_COLS, (TERM_ROWS - 1) * TERM_COLS * sizeof(VT100Attr));
 
     // Clear bottom line
     for (int x = 0; x < TERM_COLS; x++) {
@@ -416,7 +416,7 @@ void VT100::scrollUp() {
 void VT100::scrollDown() {
     // Move all lines down by one
     memmove(_screen + TERM_COLS, _screen, (TERM_ROWS - 1) * TERM_COLS);
-    memmove(_attrs + TERM_COLS, _attrs, (TERM_ROWS - 1) * TERM_COLS);
+    memmove(_attrs + TERM_COLS, _attrs, (TERM_ROWS - 1) * TERM_COLS * sizeof(VT100Attr));
 
     // Clear top line
     for (int x = 0; x < TERM_COLS; x++) {
