@@ -35,8 +35,9 @@ void setup()
   //Display Prepare - exactly like working Draw.ino
   tft.begin();
   tft.setRotation(2); // Flip screen vertically (180 degree rotation)
+  tft.setFont(&fonts::Font0); // Use built-in Font0 for terminal display
   tft.fillScreen(TFT_BLACK);
-  tft.setTextSize(3);
+  tft.setTextSize(2); // 2x scaling for better readability (roughly 16x16 pixels per char)
   delay(100);
 
   // Test sequence from working Draw.ino
