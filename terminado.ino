@@ -1,106 +1,129 @@
-/*
- * BBQ20 Keyboard Test for ESP32-S3 Elecrow HMI
- *
- * This sketch reads keyboard input from a BBQ20 keyboard connected via I2C
- * and displays the key information on the serial monitor.
- *
- * Hardware connections for Elecrow ESP32-S3 HMI:
- * - BBQ20 SDA -> ESP32-S3 IO19 (GPIO 19)
- * - BBQ20 SCL -> ESP32-S3 IO20 (GPIO 20)
- * - BBQ20 GND -> ESP32-S3 GND
- * - BBQ20 VCC -> ESP32-S3 3.3V
- */
+/**************************Terminado - BBQ20 Keyboard Display for ESP32-S3 HMI************************
+Version     :	1.0
+Suitable for:	CrowPanel ESP32 HMI Display 5.0 inch
+Product link:	https://www.elecrow.com/esp32-display-series-hmi-touch-screen.html
+Description	:	Displays keyboard input from BBQ20 keyboard on 800x480 screen
+********************************************************************************/
 
+
+#include <Wire.h>
+#include <SPI.h>
+
+
+/*******************************************************************************
+   Config the display panel and touch panel in gfx_conf.h
+ ******************************************************************************/
+#include "gfx_conf.h"
+
+/* Keyboard support */
 #include <BBQ10Keyboard.h>
 
 BBQ10Keyboard keyboard;
 
-void setup() {
-    Serial.begin(115200);
-    delay(1000);
+void setup()
+{
+  Serial.begin(9600);
 
-    Serial.println("BBQ20 Keyboard Test Starting...");
-    Serial.println("Initializing I2C and keyboard...");
+  // Initialize I2C with slower speed for BBQ20 keyboard compatibility
+  Wire.begin(19, 20);  // I2C for Elecrow ESP32-S3 HMI: SDA=IO19, SCL=IO20
+  Wire.setClock(100000); // Lower I2C speed to 100kHz for BBQ20 keyboard compatibility
 
-    // Initialize I2C with Elecrow ESP32-S3 HMI pinout
-    Wire.begin(19, 20);  // SDA=IO19, SCL=IO20
+  // Initialize keyboard after I2C is set up
+  keyboard.begin();
+  keyboard.setBacklight(0.5f); // 50% keyboard backlight
 
-    // Initialize keyboard with default I2C address (0x1F)
-    keyboard.begin();
+  //Display Prepare - exactly like working Draw.ino
+  tft.begin();
+  tft.fillScreen(TFT_BLACK);
+  tft.setTextSize(3);
+  delay(100);
 
-    // Set keyboard backlight to 50% brightness
-    keyboard.setBacklight(0.5f);
+  // Test sequence from working Draw.ino
+  tft.fillScreen(TFT_BLUE);
+  delay(1000);
+  tft.fillScreen(TFT_YELLOW);
+  delay(1000);
+  tft.fillScreen(TFT_GREEN);
+  delay(1000);
+  tft.fillScreen(TFT_WHITE);
+  delay(1000);
+  tft.fillScreen(TFT_BLACK);
 
-    Serial.println("Keyboard initialized!");
-    Serial.println("Start typing on the BBQ20 keyboard...");
-    Serial.println("----------------------------------------");
+  // Draw title like working example
+  tft.setCursor(200, 240);
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.print("Terminado Started");
+
+  // Test basic text display
+  tft.setCursor(50, 100);
+  tft.setTextColor(TFT_YELLOW, TFT_BLACK);
+  tft.print("Type on BBQ20 Keyboard");
+
+  Serial.println("Terminado started - Type on BBQ20 keyboard!");
+  Serial.println("Checking keyboard status...");
+
+  // Test keyboard communication
+  int status = keyboard.status();
+  Serial.printf("Keyboard status: %d\n", status);
+
+  // Try to read basic info from keyboard
+  uint8_t version = keyboard.readRegister8(0x01); // Version register
+  Serial.printf("Keyboard firmware version: %d\n", version);
+
+  int keyCount = keyboard.keyCount();
+  Serial.printf("Initial key count: %d\n", keyCount);
 }
 
-void loop() {
-    // Check if there are any key events waiting
-    int keyCount = keyboard.keyCount();
+void loop()
+{
+  const int keyCount = keyboard.keyCount();
 
-    if (keyCount > 0) {
-        // Read the key event
-        const BBQ10Keyboard::KeyEvent key = keyboard.keyEvent();
+  // Only print loop info occasionally to reduce spam
+  static unsigned long lastPrint = 0;
+  if (millis() - lastPrint > 1000) {
+    Serial.printf("Loop - keyCount: %d\n", keyCount);
+    lastPrint = millis();
+  }
 
-        // Display key information
-        Serial.print("Key: '");
-        Serial.print(key.key);
-        Serial.print("' (");
-        Serial.print((uint8_t)key.key);
-        Serial.print(") | State: ");
+  if (keyCount == 0) {
+    return;
+  }
 
-        // Display key state
-        switch(key.state) {
-            case BBQ10Keyboard::StateIdle:
-                Serial.print("Idle");
-                break;
-            case BBQ10Keyboard::StatePress:
-                Serial.print("Press");
-                break;
-            case BBQ10Keyboard::StateLongPress:
-                Serial.print("LongPress");
-                break;
-            case BBQ10Keyboard::StateRelease:
-                Serial.print("Release");
-                break;
-            default:
-                Serial.print("Unknown");
-                break;
-        }
+  const BBQ10Keyboard::KeyEvent key = keyboard.keyEvent();
+  String state = "pressed";
+  if (key.state == BBQ10Keyboard::StateLongPress)
+    state = "held down";
+  else if (key.state == BBQ10Keyboard::StateRelease)
+    state = "released";
 
-        Serial.println();
+  Serial.printf("key: '%c' (dec %d, hex %02x) %s\r\n", key.key, key.key, key.key, state.c_str());
 
-        // Simple buffer to build up a line of text
-        static char textBuffer[256] = {0};
-        static int bufferPos = 0;
+  // Display keys on screen - simple version first
+  static int yPos = 150;
+  static int xPos = 50;
 
-        if (key.state == BBQ10Keyboard::StatePress) {
-            if (key.key == '\n') {
-                // Enter key - display the complete line
-                if (bufferPos > 0) {
-                    Serial.print("Text entered: ");
-                    Serial.println(textBuffer);
-                    bufferPos = 0;
-                    textBuffer[0] = '\0';
-                }
-            } else if (key.key == '\b') {
-                // Backspace key
-                if (bufferPos > 0) {
-                    bufferPos--;
-                    textBuffer[bufferPos] = '\0';
-                }
-            } else if (key.key >= 32 && key.key <= 126) {
-                // Printable ASCII character
-                if (bufferPos < sizeof(textBuffer) - 1) {
-                    textBuffer[bufferPos++] = key.key;
-                    textBuffer[bufferPos] = '\0';
-                }
-            }
-        }
+  if (key.state == BBQ10Keyboard::StatePress) {
+    tft.setCursor(xPos, yPos);
+    tft.setTextColor(TFT_GREEN, TFT_BLACK);
+    tft.print(key.key);
+
+    xPos += 20;  // Move cursor right
+    if (xPos > 750) {  // Wrap to next line
+      xPos = 50;
+      yPos += 30;
+      if (yPos > 450) {  // Reset if screen full
+        yPos = 150;
+        tft.fillScreen(TFT_BLACK);  // Clear screen
+      }
     }
+  }
 
-    // Small delay to prevent overwhelming the serial output
-    delay(10);
+  // Keyboard backlight control (same as working Draw.ino)
+  if (key.state == BBQ10Keyboard::StatePress) {
+    if (key.key == 'b') {
+      keyboard.setBacklight(0);
+    } else if (key.key == 'B') {
+      keyboard.setBacklight(1.0);
+    }
+  }
 }
