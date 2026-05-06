@@ -76,6 +76,7 @@ void setup()
 
 void loop()
 {
+  // Handle keyboard input
   const int keyCount = keyboard.keyCount();
 
   // Only print loop info occasionally to reduce spam
@@ -85,45 +86,69 @@ void loop()
     lastPrint = millis();
   }
 
-  if (keyCount == 0) {
-    return;
-  }
+  if (keyCount > 0) {
+    const BBQ10Keyboard::KeyEvent key = keyboard.keyEvent();
+    String state = "pressed";
+    if (key.state == BBQ10Keyboard::StateLongPress)
+      state = "held down";
+    else if (key.state == BBQ10Keyboard::StateRelease)
+      state = "released";
 
-  const BBQ10Keyboard::KeyEvent key = keyboard.keyEvent();
-  String state = "pressed";
-  if (key.state == BBQ10Keyboard::StateLongPress)
-    state = "held down";
-  else if (key.state == BBQ10Keyboard::StateRelease)
-    state = "released";
+    Serial.printf("key: '%c' (dec %d, hex %02x) %s\r\n", key.key, key.key, key.key, state.c_str());
 
-  Serial.printf("key: '%c' (dec %d, hex %02x) %s\r\n", key.key, key.key, key.key, state.c_str());
+    // Display keys on screen
+    static int yPos = 150;
+    static int xPos = 50;
 
-  // Display keys on screen - simple version first
-  static int yPos = 150;
-  static int xPos = 50;
+    if (key.state == BBQ10Keyboard::StatePress) {
+      tft.setCursor(xPos, yPos);
+      tft.setTextColor(TFT_GREEN, TFT_BLACK);
+      tft.print(key.key);
 
-  if (key.state == BBQ10Keyboard::StatePress) {
-    tft.setCursor(xPos, yPos);
-    tft.setTextColor(TFT_GREEN, TFT_BLACK);
-    tft.print(key.key);
+      xPos += 20;  // Move cursor right
+      if (xPos > 750) {  // Wrap to next line
+        xPos = 50;
+        yPos += 30;
+        if (yPos > 450) {  // Reset if screen full
+          yPos = 150;
+          tft.fillScreen(TFT_BLACK);  // Clear screen
+        }
+      }
+    }
 
-    xPos += 20;  // Move cursor right
-    if (xPos > 750) {  // Wrap to next line
-      xPos = 50;
-      yPos += 30;
-      if (yPos > 450) {  // Reset if screen full
-        yPos = 150;
-        tft.fillScreen(TFT_BLACK);  // Clear screen
+    // Keyboard backlight control
+    if (key.state == BBQ10Keyboard::StatePress) {
+      if (key.key == 'b') {
+        keyboard.setBacklight(0);
+      } else if (key.key == 'B') {
+        keyboard.setBacklight(1.0);
       }
     }
   }
 
-  // Keyboard backlight control (same as working Draw.ino)
-  if (key.state == BBQ10Keyboard::StatePress) {
-    if (key.key == 'b') {
-      keyboard.setBacklight(0);
-    } else if (key.key == 'B') {
-      keyboard.setBacklight(1.0);
+  // Handle serial input
+  if (Serial.available()) {
+    static int serialYPos = 200;
+    static int serialXPos = 50;
+
+    char c = Serial.read();
+
+    // Display serial input in different color
+    tft.setCursor(serialXPos, serialYPos);
+    tft.setTextColor(TFT_CYAN, TFT_BLACK);
+    tft.print(c);
+
+    serialXPos += 20;  // Move cursor right
+    if (serialXPos > 750) {  // Wrap to next line
+      serialXPos = 50;
+      serialYPos += 30;
+      if (serialYPos > 450) {  // Reset if screen full
+        serialYPos = 200;
+        tft.fillRect(0, 180, 800, 300, TFT_BLACK);  // Clear serial area
+      }
     }
+
+    // Echo back to serial
+    Serial.write(c);
   }
 }
