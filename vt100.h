@@ -8,8 +8,20 @@
 
 #include <Arduino.h>
 
-#define TERM_COLS 50
-#define TERM_ROWS 30
+// Screen dimensions (must match terminado.ino)
+#define SCREEN_WIDTH 800
+#define SCREEN_HEIGHT 480
+
+// Font multiplier (must match terminado.ino)
+#define FONT_MULTIPLIER 1
+
+// Calculate cell size from font multiplier (Font0 base is 8x8 pixels)
+#define TERM_CELL_WIDTH (8 * FONT_MULTIPLIER + 1)  // +1 for spacing
+#define TERM_CELL_HEIGHT (8 * FONT_MULTIPLIER + 2) // +2 for line spacing
+
+// Calculate terminal size based on screen and cell size
+#define TERM_COLS (SCREEN_WIDTH / TERM_CELL_WIDTH)
+#define TERM_ROWS (SCREEN_HEIGHT / TERM_CELL_HEIGHT)
 #define TERM_BUFFER_SIZE (TERM_COLS * TERM_ROWS)
 
 // VT100 colors
@@ -40,7 +52,14 @@ struct VT100Attr {
 // Terminal state
 class VT100 {
 public:
+    // Callback type for writing responses back to host
+    typedef void (*WriteCallback)(const char* data, size_t len);
+
     VT100();
+    VT100(WriteCallback callback);
+
+    // Set write callback for responses
+    void setWriteCallback(WriteCallback callback) { _writeCallback = callback; }
 
     // Process incoming character
     void process(char c);
@@ -87,12 +106,16 @@ private:
 
     char _escapeBuf[32];  // Buffer for escape sequences
     int _escapePos;
+    char _flag;  // CSI flag character (like '?')
 
     // Current attributes
     VT100Attr _currentAttr;
 
     // Redraw flag
     bool _needsRedraw;
+
+    // Write callback for sending responses back to host
+    WriteCallback _writeCallback;
 
     // Internal methods
     void handleChar(char c);

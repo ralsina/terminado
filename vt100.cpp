@@ -14,7 +14,9 @@ VT100::VT100() :
     _savedCursorY(0),
     _state(STATE_GROUND),
     _escapePos(0),
-    _needsRedraw(false)
+    _needsRedraw(false),
+    _flag('\0'),
+    _writeCallback(nullptr)
 {
     // Initialize screen buffer with spaces
     memset(_screen, ' ', TERM_BUFFER_SIZE);
@@ -157,11 +159,18 @@ void VT100::executeCSI(const char* seq, int len) {
 
     int params[10] = {0};
     int paramCount = 0;
+    _flag = '\0';
 
     // Skip "ESC[" prefix
     const char* p = seq + 2;
     const char* end = seq + len;
     char command = end[-1];  // Last character is the command
+
+    // Check for flag character (like '?')
+    if (*p == '?') {
+        _flag = '?';
+        p++;
+    }
 
     // Parse parameters
     while (p < end - 1 && paramCount < 10) {
@@ -318,6 +327,44 @@ void VT100::executeCSI(const char* seq, int len) {
                 int n = (params[0] > 0) ? params[0] : 1;
                 for (int i = 0; i < n && _cursorX + i < TERM_COLS; i++) {
                     setChar(' ', _cursorX + i, _cursorY);
+                }
+            }
+            break;
+
+        case 'c':  // Device Attributes
+            if (_flag == '?') {
+                // VT100 device attributes response
+                if (_writeCallback) {
+                    const char* response = "\033[?1;2c";
+                    _writeCallback(response, strlen(response));
+                }
+            }
+            break;
+
+        case 'n':  // Device Status Report
+            if (params[0] == 5) {
+                // Respond with "OK": ESC [ 0 n
+                if (_writeCallback) {
+                    const char* response = "\033[0n";
+                    _writeCallback(response, strlen(response));
+                }
+            } else if (params[0] == 6) {
+                // Report cursor position: ESC [ row ; col R
+                if (_writeCallback) {
+                    char response[32];
+                    snprintf(response, sizeof(response), "\033[%d;%dR", _cursorY + 1, _cursorX + 1);
+                    _writeCallback(response, strlen(response));
+                }
+            }
+            break;
+
+        case 't':  // Window manipulation
+            if (params[0] == 18) {
+                // Report terminal size: ESC [ 8 ; height ; width t
+                if (_writeCallback) {
+                    char response[32];
+                    snprintf(response, sizeof(response), "\033[8;%d;%dt", TERM_ROWS, TERM_COLS);
+                    _writeCallback(response, strlen(response));
                 }
             }
             break;

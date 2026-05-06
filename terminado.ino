@@ -14,11 +14,21 @@ Description	:	VT100 terminal emulator with BBQ20 keyboard and serial communicati
 BBQ10Keyboard keyboard;
 VT100 vt100;
 
-// Display configuration
+// Callback for sending VT100 responses back to host
+void vt100WriteCallback(const char* data, size_t len) {
+  Serial.write(data, len);
+}
+
+// Display configuration - set multiplier and everything is calculated
+#define FONT_MULTIPLIER 1  // 1x scaling for smaller text (more columns)
+#define SCREEN_WIDTH 800
+#define SCREEN_HEIGHT 480
+
+// Calculate cell size from font multiplier (Font0 base is 8x8 pixels)
+#define TERM_CELL_WIDTH (8 * FONT_MULTIPLIER + 1)  // +1 for spacing
+#define TERM_CELL_HEIGHT (8 * FONT_MULTIPLIER + 2) // +2 for line spacing
 #define TERM_OFFSET_X 0
 #define TERM_OFFSET_Y 0
-#define TERM_CELL_WIDTH 16
-#define TERM_CELL_HEIGHT 16
 
 // Color mapping for ANSI colors
 static const uint32_t ansi_colors[8] = {
@@ -57,7 +67,7 @@ void setup()
   tft.begin();
   tft.setRotation(2); // Flip screen vertically (180 degree rotation)
   tft.setFont(&fonts::Font0); // Use built-in Font0 for terminal display
-  tft.setTextSize(2); // 2x scaling for better readability
+  tft.setTextSize(FONT_MULTIPLIER); // Use configured multiplier
   tft.fillScreen(TFT_BLACK);
 
   // Draw title
@@ -68,6 +78,7 @@ void setup()
   tft.fillScreen(TFT_BLACK);
 
   // Initialize terminal
+  vt100.setWriteCallback(vt100WriteCallback);
   vt100.clearScreen();
 
   Serial.println("VT100 Terminal Emulator Ready");
@@ -207,8 +218,9 @@ void renderChar(int x, int y, char c) {
 
   // Only draw character if it's not a space
   if (c != ' ') {
-    // Center character in the cell (Font0 at 2x is 16x16 pixels)
-    tft.setCursor(px, py); // Position at top-left of cell
+    // Center character in the cell using calculated positioning
+    int charOffset = FONT_MULTIPLIER > 1 ? 1 : 0;
+    tft.setCursor(px + charOffset, py + charOffset);
     tft.setTextColor(fg, bg);
     tft.print(c);
   }
