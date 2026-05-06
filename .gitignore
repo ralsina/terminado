@@ -1,0 +1,28 @@
+# Arduino IDE files
+*.buildPreference
+*.prefs
+*.log
+
+# PlatformIO files
+.platformio/
+.pioenvs
+.piolibdeps
+
+# Build artifacts
+.build/
+*.elf
+*.bin
+*.hex
+*.o
+*.a
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
