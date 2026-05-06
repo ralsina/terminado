@@ -1,28 +1,45 @@
-/**************************Terminado - BBQ20 Keyboard Display for ESP32-S3 HMI************************
-Version     :	1.0
+/**************************Terminado - VT100 Terminal Emulator for ESP32-S3************************
+Version     :	2.0
 Suitable for:	CrowPanel ESP32 HMI Display 5.0 inch
 Product link:	https://www.elecrow.com/esp32-display-series-hmi-touch-screen.html
-Description	:	Displays keyboard input from BBQ20 keyboard on 800x480 screen
+Description	:	VT100 terminal emulator with BBQ20 keyboard and serial communication
 ********************************************************************************/
-
 
 #include <Wire.h>
 #include <SPI.h>
-
-
-/*******************************************************************************
-   Config the display panel and touch panel in gfx_conf.h
- ******************************************************************************/
 #include "gfx_conf.h"
-
-/* Keyboard support */
 #include <BBQ10Keyboard.h>
+#include "vt100.h"
 
 BBQ10Keyboard keyboard;
+VT100 vt100;
+
+// Display configuration
+#define TERM_OFFSET_X 80
+#define TERM_OFFSET_Y 0
+#define TERM_CELL_WIDTH 8
+#define TERM_CELL_HEIGHT 16
+
+// Color mapping for ANSI colors
+static const uint32_t ansi_colors[8] = {
+    TFT_BLACK,   // 0: Black
+    0xFF0000,    // 1: Red
+    0x00FF00,    // 2: Green
+    0xFFFF00,    // 3: Yellow
+    0x0000FF,    // 4: Blue
+    0xFF00FF,    // 5: Magenta
+    0x00FFFF,    // 6: Cyan
+    0xFFFFFF     // 7: White
+};
+
+// Cursor blink state
+bool cursorVisible = true;
+unsigned long lastCursorBlink = 0;
+const unsigned long CURSOR_BLINK_INTERVAL = 500;
 
 void setup()
 {
-  Serial.begin(9600);
+  Serial.begin(115200);
 
   // Initialize I2C with slower speed for BBQ20 keyboard compatibility
   Wire.begin(19, 20);  // I2C for Elecrow ESP32-S3 HMI: SDA=IO19, SCL=IO20
@@ -32,125 +49,186 @@ void setup()
   keyboard.begin();
   keyboard.setBacklight(0.5f); // 50% keyboard backlight
 
-  //Display Prepare - exactly like working Draw.ino
+  // Display Prepare
   tft.begin();
   tft.setRotation(2); // Flip screen vertically (180 degree rotation)
   tft.setFont(&fonts::Font0); // Use built-in Font0 for terminal display
   tft.fillScreen(TFT_BLACK);
-  tft.setTextSize(2); // 2x scaling for better readability (roughly 16x16 pixels per char)
-  delay(100);
 
-  // Test sequence from working Draw.ino
-  tft.fillScreen(TFT_BLUE);
-  delay(1000);
-  tft.fillScreen(TFT_YELLOW);
-  delay(1000);
-  tft.fillScreen(TFT_GREEN);
-  delay(1000);
-  tft.fillScreen(TFT_WHITE);
+  // Draw title
+  tft.setCursor(200, 240);
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.print("VT100 Terminal Ready");
   delay(1000);
   tft.fillScreen(TFT_BLACK);
 
-  // Draw title like working example
-  tft.setCursor(200, 240);
-  tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft.print("Terminado Started");
+  // Initialize terminal
+  vt100.clearScreen();
 
-  // Test basic text display
-  tft.setCursor(50, 100);
-  tft.setTextColor(TFT_YELLOW, TFT_BLACK);
-  tft.print("Type on BBQ20 Keyboard");
-
-  Serial.println("Terminado started - Type on BBQ20 keyboard!");
-  Serial.println("Checking keyboard status...");
-
-  // Test keyboard communication
-  int status = keyboard.status();
-  Serial.printf("Keyboard status: %d\n", status);
-
-  // Try to read basic info from keyboard
-  uint8_t version = keyboard.readRegister8(0x01); // Version register
-  Serial.printf("Keyboard firmware version: %d\n", version);
-
-  int keyCount = keyboard.keyCount();
-  Serial.printf("Initial key count: %d\n", keyCount);
+  Serial.println("VT100 Terminal Emulator Ready");
+  Serial.println("Send terminal data via Serial at 115200 baud");
 }
 
 void loop()
 {
-  // Handle keyboard input
-  const int keyCount = keyboard.keyCount();
-
-  // Only print loop info occasionally to reduce spam
-  static unsigned long lastPrint = 0;
-  if (millis() - lastPrint > 1000) {
-    Serial.printf("Loop - keyCount: %d\n", keyCount);
-    lastPrint = millis();
+  // Handle incoming serial data (from host to terminal)
+  if (Serial.available()) {
+    while (Serial.available()) {
+      char c = Serial.read();
+      vt100.process(c);
+    }
+    renderTerminal();
   }
 
+  // Handle keyboard input (from terminal to host)
+  const int keyCount = keyboard.keyCount();
   if (keyCount > 0) {
     const BBQ10Keyboard::KeyEvent key = keyboard.keyEvent();
-    String state = "pressed";
-    if (key.state == BBQ10Keyboard::StateLongPress)
-      state = "held down";
-    else if (key.state == BBQ10Keyboard::StateRelease)
-      state = "released";
-
-    Serial.printf("key: '%c' (dec %d, hex %02x) %s\r\n", key.key, key.key, key.key, state.c_str());
-
-    // Display keys on screen
-    static int yPos = 150;
-    static int xPos = 50;
 
     if (key.state == BBQ10Keyboard::StatePress) {
-      tft.setCursor(xPos, yPos);
-      tft.setTextColor(TFT_GREEN, TFT_BLACK);
-      tft.print(key.key);
-
-      xPos += 20;  // Move cursor right
-      if (xPos > 750) {  // Wrap to next line
-        xPos = 50;
-        yPos += 30;
-        if (yPos > 450) {  // Reset if screen full
-          yPos = 150;
-          tft.fillScreen(TFT_BLACK);  // Clear screen
-        }
-      }
+      handleKeyPress(key);
     }
+  }
 
-    // Keyboard backlight control
-    if (key.state == BBQ10Keyboard::StatePress) {
-      if (key.key == 'b') {
-        keyboard.setBacklight(0);
-      } else if (key.key == 'B') {
-        keyboard.setBacklight(1.0);
+  // Handle cursor blinking
+  if (millis() - lastCursorBlink > CURSOR_BLINK_INTERVAL) {
+    cursorVisible = !cursorVisible;
+    lastCursorBlink = millis();
+    renderCursor();
+  }
+}
+
+void handleKeyPress(const BBQ10Keyboard::KeyEvent &key) {
+  char c = key.key;
+
+  // Handle special keys
+  switch (c) {
+    case '\n':  // Enter key
+      Serial.write('\r');
+      Serial.write('\n');
+      break;
+
+    case '\b':  // Backspace
+      Serial.write('\b');
+      break;
+
+    case '\t':  // Tab
+      Serial.write('\t');
+      break;
+
+    case 27:   // Escape
+      Serial.write('\e');
+      break;
+
+    default:
+      // Regular characters
+      if (c >= 32 && c <= 126) {
+        Serial.write(c);
+      }
+      break;
+  }
+}
+
+void renderTerminal() {
+  static char lastScreen[TERM_COLS * TERM_ROWS];
+  static bool initialized = false;
+
+  if (!initialized) {
+    memset(lastScreen, 0, sizeof(lastScreen));
+    initialized = true;
+  }
+
+  // Only redraw changed characters for efficiency
+  for (int y = 0; y < vt100.rows(); y++) {
+    for (int x = 0; x < vt100.cols(); x++) {
+      int idx = y * vt100.cols() + x;
+      char c = vt100.getChar(x, y);
+
+      if (c != lastScreen[idx]) {
+        lastScreen[idx] = c;
+        renderChar(x, y, c);
       }
     }
   }
 
-  // Handle serial input
-  if (Serial.available()) {
-    static int serialYPos = 200;
-    static int serialXPos = 50;
+  // Always redraw cursor
+  renderCursor();
+}
 
-    char c = Serial.read();
+void renderChar(int x, int y, char c) {
+  // Get character attributes
+  VT100Attr attr = vt100.getAttr(x, y);
 
-    // Display serial input in different color
-    tft.setCursor(serialXPos, serialYPos);
-    tft.setTextColor(TFT_CYAN, TFT_BLACK);
+  // Calculate position
+  int px = TERM_OFFSET_X + x * TERM_CELL_WIDTH;
+  int py = TERM_OFFSET_Y + y * TERM_CELL_HEIGHT;
+
+  // Get colors
+  uint32_t fg = ansi_colors[attr.fg];
+  uint32_t bg = ansi_colors[attr.bg];
+
+  // Handle reverse video
+  if (attr.reverse) {
+    uint32_t temp = fg;
+    fg = bg;
+    bg = temp;
+  }
+
+  // Handle bold (brighter colors)
+  if (attr.bold && fg != TFT_BLACK) {
+    fg = brightenColor(fg);
+  }
+
+  // Clear character cell
+  tft.fillRect(px, py, TERM_CELL_WIDTH, TERM_CELL_HEIGHT, bg);
+
+  // Draw character
+  tft.setCursor(px, py);
+  tft.setTextColor(fg, bg);
+  tft.print(c);
+}
+
+void renderCursor() {
+  // Save current screen content at cursor position
+  int cx = vt100.cursorX();
+  int cy = vt100.cursorY();
+
+  int px = TERM_OFFSET_X + cx * TERM_CELL_WIDTH;
+  int py = TERM_OFFSET_Y + cy * TERM_CELL_HEIGHT;
+
+  if (cursorVisible) {
+    // Draw cursor as inverted block
+    char c = vt100.getChar(cx, cy);
+    VT100Attr attr = vt100.getAttr(cx, cy);
+
+    uint32_t fg = ansi_colors[attr.fg];
+    uint32_t bg = ansi_colors[attr.bg];
+
+    if (attr.reverse) {
+      uint32_t temp = fg;
+      fg = bg;
+      bg = temp;
+    }
+
+    tft.fillRect(px, py, TERM_CELL_WIDTH, TERM_CELL_HEIGHT, fg);
+    tft.setCursor(px, py);
+    tft.setTextColor(bg, fg);
     tft.print(c);
-
-    serialXPos += 20;  // Move cursor right
-    if (serialXPos > 750) {  // Wrap to next line
-      serialXPos = 50;
-      serialYPos += 30;
-      if (serialYPos > 450) {  // Reset if screen full
-        serialYPos = 200;
-        tft.fillRect(0, 180, 800, 300, TFT_BLACK);  // Clear serial area
-      }
-    }
-
-    // Echo back to serial
-    Serial.write(c);
+  } else {
+    // Restore normal character
+    renderChar(cx, cy, vt100.getChar(cx, cy));
   }
+}
+
+uint32_t brightenColor(uint32_t color) {
+  // Brighten color by adding 128 to each RGB component
+  uint8_t r = (color >> 16) & 0xFF;
+  uint8_t g = (color >> 8) & 0xFF;
+  uint8_t b = color & 0xFF;
+
+  r = min(255, r + 128);
+  g = min(255, g + 128);
+  b = min(255, b + 128);
+
+  return (r << 16) | (g << 8) | b;
 }
