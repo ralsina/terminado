@@ -37,6 +37,10 @@ bool cursorVisible = true;
 unsigned long lastCursorBlink = 0;
 const unsigned long CURSOR_BLINK_INTERVAL = 500;
 
+// Track previous cursor position for proper restoration
+int prevCursorX = -1;
+int prevCursorY = -1;
+
 void setup()
 {
   Serial.begin(115200);
@@ -138,6 +142,13 @@ void renderTerminal() {
     initialized = true;
   }
 
+  // Clear previous cursor position before rendering
+  if (prevCursorX >= 0 && prevCursorY >= 0) {
+    renderChar(prevCursorX, prevCursorY, vt100.getChar(prevCursorX, prevCursorY));
+    prevCursorX = -1;
+    prevCursorY = -1;
+  }
+
   // Only redraw changed characters for efficiency
   for (int y = 0; y < vt100.rows(); y++) {
     for (int x = 0; x < vt100.cols(); x++) {
@@ -151,7 +162,7 @@ void renderTerminal() {
     }
   }
 
-  // Always redraw cursor
+  // Draw cursor at new position
   renderCursor();
 }
 
@@ -189,9 +200,20 @@ void renderChar(int x, int y, char c) {
 }
 
 void renderCursor() {
-  // Save current screen content at cursor position
   int cx = vt100.cursorX();
   int cy = vt100.cursorY();
+
+  // Restore previous cursor position first
+  if (prevCursorX >= 0 && prevCursorY >= 0) {
+    if (prevCursorX != cx || prevCursorY != cy) {
+      // Cursor moved, restore old position
+      renderChar(prevCursorX, prevCursorY, vt100.getChar(prevCursorX, prevCursorY));
+    }
+  }
+
+  // Update previous cursor position
+  prevCursorX = cx;
+  prevCursorY = cy;
 
   int px = TERM_OFFSET_X + cx * TERM_CELL_WIDTH;
   int py = TERM_OFFSET_Y + cy * TERM_CELL_HEIGHT;
@@ -215,7 +237,7 @@ void renderCursor() {
     tft.setTextColor(bg, fg);
     tft.print(c);
   } else {
-    // Restore normal character
+    // Restore normal character (cursor invisible)
     renderChar(cx, cy, vt100.getChar(cx, cy));
   }
 }
