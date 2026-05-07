@@ -16,7 +16,8 @@ VT100::VT100() :
     _escapePos(0),
     _needsRedraw(false),
     _flag('\0'),
-    _writeCallback(nullptr)
+    _writeCallback(nullptr),
+    _titleCallback(nullptr)
 {
     // Initialize screen buffer with spaces
     memset(_screen, ' ', TERM_BUFFER_SIZE);
@@ -66,9 +67,34 @@ void VT100::process(char c) {
             break;
 
         case STATE_OSC:
-            // Operating System Command - mostly ignore for now
+            // Operating System Command - set window title
+            // Format: ESC ] 0 ; title BEL or ESC ] 2 ; title BEL
             if (c == '\033' || c == '\007') {
+                // OSC sequence terminated
+                if (_escapePos > 2 && _escapeBuf[2] == ';') {
+                    // Extract title (everything after the semicolon)
+                    char titleStart = 3;  // Skip "ESC]2;" or "ESC]0;"
+                    // Find the title end (before terminator)
+                    for (int i = titleStart; i < _escapePos; i++) {
+                        if (_escapeBuf[i] == '\033' || _escapeBuf[i] == '\007') {
+                            _escapeBuf[i] = '\0';  // Null terminate
+                            break;
+                        }
+                    }
+
+                    // Set window title (max 64 chars for safety)
+                    char title[64];
+                    strncpy(title, _escapeBuf + titleStart, sizeof(title) - 1);
+                    title[sizeof(title) - 1] = '\0';
+
+                    // Call the title callback if set
+                    if (_titleCallback) {
+                        _titleCallback(title);
+                    }
+                }
                 _state = STATE_GROUND;
+            } else if (_escapePos < 31) {
+                _escapeBuf[_escapePos++] = c;
             }
             break;
     }

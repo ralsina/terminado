@@ -18,9 +18,25 @@ VT100 vt100;
 bool fnKeyPressed = false;
 bool ctrlKeyPressed = false;
 
+// Status bar state
+String terminalTitle = "VT100 Terminal";
+const int serialBaud = 19200;
+String debugMessage = "";
+unsigned long debugMessageTime = 0;
+const unsigned long DEBUG_MESSAGE_DURATION = 3000; // Show debug for 3 seconds
+
 // Callback for sending VT100 responses back to host
 void vt100WriteCallback(const char* data, size_t len) {
   Serial.write(data, len);
+}
+
+// Callback for handling window title changes
+void vt100TitleCallback(const char* title) {
+  terminalTitle = title;
+  // Trim title to reasonable length for display
+  if (terminalTitle.length() > 30) {
+    terminalTitle = terminalTitle.substring(0, 30) + "...";
+  }
 }
 
 // Display configuration - set multiplier and everything is calculated
@@ -60,6 +76,33 @@ bool flowControlPaused = false;
 unsigned long lastFlowControlCheck = 0;
 const unsigned long FLOW_CONTROL_INTERVAL = 100; // Check every 100ms
 
+// Status bar functions
+void setStatusDebug(const char* msg) {
+  debugMessage = msg;
+  debugMessageTime = millis();
+}
+
+void renderStatusBar() {
+  int py = TERM_OFFSET_Y + STATUS_ROW * TERM_CELL_HEIGHT;
+
+  // Clear the status bar
+  tft.fillRect(0, py, SCREEN_WIDTH, TERM_CELL_HEIGHT, TFT_BLUE);
+
+  tft.setCursor(2, py + 1);
+  tft.setTextColor(TFT_WHITE, TFT_BLUE);
+
+  // Show debug message if active, otherwise show status info
+  if (millis() - debugMessageTime < DEBUG_MESSAGE_DURATION && debugMessage.length() > 0) {
+    tft.print("DEBUG: ");
+    tft.print(debugMessage);
+  } else {
+    tft.print(terminalTitle);
+    tft.print(" | ");
+    tft.print(serialBaud);
+    tft.print(" baud");
+  }
+}
+
 void setup()
 {
   Serial.begin(19200); // Middle ground baud rate
@@ -92,6 +135,7 @@ void setup()
 
   // Initialize terminal
   vt100.setWriteCallback(vt100WriteCallback);
+  vt100.setTitleCallback(vt100TitleCallback);
   vt100.clearScreen();
 
   // Report terminal size after connection is stable
@@ -142,6 +186,9 @@ void loop()
     lastCursorBlink = millis();
     renderCursor();
   }
+
+  // Update status bar
+  renderStatusBar();
 }
 
 void handleKeyPress(const BBQ10Keyboard::KeyEvent &key) {

@@ -20,9 +20,11 @@
 #define TERM_CELL_HEIGHT (8 * FONT_MULTIPLIER + 2) // +2 for line spacing
 
 // Calculate terminal size based on screen and cell size
+// Reserve one row at bottom for status bar
 #define TERM_COLS (SCREEN_WIDTH / TERM_CELL_WIDTH)
-#define TERM_ROWS (SCREEN_HEIGHT / TERM_CELL_HEIGHT)
+#define TERM_ROWS ((SCREEN_HEIGHT / TERM_CELL_HEIGHT) - 1)  // One row for status bar
 #define TERM_BUFFER_SIZE (TERM_COLS * TERM_ROWS)
+#define STATUS_ROW (TERM_ROWS)  // The row below the terminal
 
 // VT100 colors
 enum VT100Color {
@@ -54,12 +56,17 @@ class VT100 {
 public:
     // Callback type for writing responses back to host
     typedef void (*WriteCallback)(const char* data, size_t len);
+    // Callback type for window title changes
+    typedef void (*TitleCallback)(const char* title);
 
     VT100();
     VT100(WriteCallback callback);
 
     // Set write callback for responses
     void setWriteCallback(WriteCallback callback) { _writeCallback = callback; }
+
+    // Set title callback for window title changes
+    void setTitleCallback(TitleCallback callback) { _titleCallback = callback; }
 
     // Process incoming character
     void process(char c);
@@ -116,6 +123,9 @@ private:
 
     // Write callback for sending responses back to host
     WriteCallback _writeCallback;
+
+    // Title callback for window title changes
+    TitleCallback _titleCallback;
 
     // Internal methods
     void handleChar(char c);
