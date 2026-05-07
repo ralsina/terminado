@@ -78,6 +78,12 @@ bool flowControlPaused = false;
 unsigned long lastFlowControlCheck = 0;
 const unsigned long FLOW_CONTROL_INTERVAL = 100; // Check every 100ms
 
+// Key autorepeat state
+char lastRepeatedKey = '\0';
+unsigned long lastRepeatTime = 0;
+const unsigned long AUTOREPEAT_DELAY = 500;    // Initial delay before repeat (ms)
+const unsigned long AUTOREPEAT_RATE = 100;     // Repeat rate (ms)
+
 // Status bar functions
 void setStatusDebug(const char* msg) {
   debugMessage = msg;
@@ -223,10 +229,47 @@ void handleKeyPress(const BBQ10Keyboard::KeyEvent &key) {
     return;
   }
 
-  // For all other keys, only process press events (not releases)
-  if (key.state != BBQ10Keyboard::StatePress && key.state != BBQ10Keyboard::StateLongPress) {
+  // Handle key release - stop autorepeat
+  if (key.state == BBQ10Keyboard::StateRelease) {
+    if (c == lastRepeatedKey) {
+      lastRepeatedKey = '\0';  // Stop repeating this key
+    }
     return;
   }
+
+  // Handle LongPress events for autorepeat
+  if (key.state == BBQ10Keyboard::StateLongPress) {
+    // Only repeat certain keys (letters, numbers, basic punctuation)
+    if ((c >= 32 && c <= 126) && c != 7 && c != 18 && c != 5) {
+      if (c == lastRepeatedKey && millis() - lastRepeatTime > AUTOREPEAT_RATE) {
+        // This is a continued long press - repeat the key
+        setStatusDebug("REPEAT");
+        processKeyCharacter(c);
+        lastRepeatTime = millis();
+        return;
+      }
+    }
+    return;
+  }
+
+  // For regular Press events, always process
+  if (key.state == BBQ10Keyboard::StatePress) {
+    // Track this key for potential autorepeat
+    if ((c >= 32 && c <= 126) && c != 7 && c != 18 && c != 5) {
+      lastRepeatedKey = c;
+      lastRepeatTime = millis();
+    }
+    // Process the key normally
+    processKeyCharacter(c);
+    return;
+  }
+
+  // Ignore any other states
+  return;
+}
+
+// Helper function to process character input
+void processKeyCharacter(char c) {
 
   // Special key mappings for BBQ20 keyboard
   // 5 = escape, 6 = left, 17 = down, 18 = control, 7 = Fn
