@@ -187,7 +187,8 @@ void handleKeyPress(const BBQ10Keyboard::KeyEvent &key) {
         Serial.write("\033[A");  // Up arrow
         return;
       }
-      break;
+      // Fall through to default to send regular 'w'
+      // Intentional fallthrough - when Fn is not pressed, send normal character
 
     case 'a':
     case 'A':
@@ -195,7 +196,7 @@ void handleKeyPress(const BBQ10Keyboard::KeyEvent &key) {
         Serial.write("\033[D");  // Left arrow
         return;
       }
-      break;
+      // Fall through to send normal 'a'
 
     case 's':
     case 'S':
@@ -203,7 +204,7 @@ void handleKeyPress(const BBQ10Keyboard::KeyEvent &key) {
         Serial.write("\033[B");  // Down arrow
         return;
       }
-      break;
+      // Fall through to send normal 's'
 
     case 'd':
     case 'D':
@@ -211,7 +212,7 @@ void handleKeyPress(const BBQ10Keyboard::KeyEvent &key) {
         Serial.write("\033[C");  // Right arrow
         return;
       }
-      break;
+      // Fall through to send normal 'd'
 
     case '\n':  // Enter key
       Serial.write('\r');  // Just send CR, let terminal handle newline
