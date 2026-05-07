@@ -59,6 +59,10 @@ public:
     // Get screen contents
     char getChar(int x, int y) const;
     VT100Attr getAttr(int x, int y) const;
+    
+    // Get screen contents with origin mode applied
+    char getCharWithOrigin(int x, int y) const;
+    VT100Attr getAttrWithOrigin(int x, int y) const;
 
     // Cursor position
     int cursorX() const { return _cursorX; }
@@ -95,6 +99,13 @@ private:
     // Saved cursor position
     int _savedCursorX;
     int _savedCursorY;
+    
+    // Scroll region (inclusive, 0-based)
+    int _scrollTop;
+    int _scrollBottom;
+    
+    // Origin mode (DECOM): if set, cursor coordinates are relative to scrolling region
+    bool _originMode;
 
     // Escape sequence parsing
     enum State {
@@ -142,6 +153,9 @@ private:
     void scrollDown();
 
     void setChar(char c, int x, int y);
+    
+    // Convert coordinates based on origin mode
+    void applyOriginMode(int& x, int& y) const;
     int xyToIndex(int x, int y) const { return y * _cols + x; }
 };
 

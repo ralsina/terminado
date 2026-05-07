@@ -7,32 +7,35 @@
 #include <string.h>
 #include <stdio.h>
 
-VT100::VT100() :
-    _cursorX(0),
-    _cursorY(0),
-    _cols(TERM_DEFAULT_COLS),
-    _rows(TERM_DEFAULT_ROWS),
-    _bufferSize(TERM_DEFAULT_COLS * TERM_DEFAULT_ROWS),
-    _savedCursorX(0),
-    _savedCursorY(0),
-    _state(STATE_GROUND),
-    _escapePos(0),
-    _needsRedraw(false),
-    _flag('\0'),
-    _graphicsMode(false),
-    _utf8Remaining(0),
-    _utf8Codepoint(0),
-    _writeCallback(nullptr),
-    _titleCallback(nullptr)
-{
-    // Initialize screen buffer with spaces
-    memset(_screen, ' ', MAX_TERM_BUFFER_SIZE);
-
-    // Initialize all attributes
-    for (int i = 0; i < MAX_TERM_BUFFER_SIZE; i++) {
-        _attrs[i] = VT100Attr();
+    VT100::VT100() :
+        _cursorX(0),
+        _cursorY(0),
+        _cols(TERM_DEFAULT_COLS),
+        _rows(TERM_DEFAULT_ROWS),
+        _bufferSize(TERM_DEFAULT_COLS * TERM_DEFAULT_ROWS),
+        _savedCursorX(0),
+        _savedCursorY(0),
+        _scrollTop(0),
+        _scrollBottom(_rows - 1),
+        _originMode(false),
+        _state(STATE_GROUND),
+        _escapePos(0),
+        _needsRedraw(false),
+        _flag('\0'),
+        _graphicsMode(false),
+        _utf8Remaining(0),
+        _utf8Codepoint(0),
+        _writeCallback(nullptr),
+        _titleCallback(nullptr)
+    {
+        // Initialize screen buffer with spaces
+        memset(_screen, ' ', MAX_TERM_BUFFER_SIZE);
+        
+        // Initialize all attributes
+        for (int i = 0; i < _bufferSize; i++) {
+            _attrs[i] = VT100Attr();
+        }
     }
-}
 
 // Maps Unicode box-drawing codepoints (U+2500..U+257F) to VT100 ACS letters.
 // Zero means no mapping (skip/space).
@@ -362,6 +365,22 @@ void VT100::executeCSI(const char* seq, int len) {
             }
             break;
 
+        case 'r':  // Set Scrolling Region (DECSTBM)
+            {
+                int top = (params[0] > 0) ? params[0] : 1;
+                int bottom = (paramCount > 1 && params[1] > 0) ? params[1] : _rows;
+                // Convert to 0-based and clamp
+                _scrollTop = constrain(top - 1, 0, _rows - 1);
+                _scrollBottom = constrain(bottom - 1, 0, _rows - 1);
+                // Ensure valid region (top < bottom)
+                if (_scrollTop >= _scrollBottom) {
+                    _scrollTop = 0;
+                    _scrollBottom = _rows - 1;
+                }
+                setCursor(0, 0);  // Move cursor to home position
+            }
+            break;
+
         case 'J':  // Erase Display
             {
                 int mode = (params[0] > 0) ? params[0] : 0;
@@ -475,13 +494,13 @@ void VT100::executeCSI(const char* seq, int len) {
             if (_writeCallback) {
                 if (_flag == '?') {
                     // Secondary device attribute request (ESC[?c)
-                    // Respond with VT100 identification: "VT100 with no options"
-                    const char* response = "\033[?1;0c";
+                    // Respond with detailed VT100 attributes
+                    const char* response = "\033[?6;1;2;6;15;18;20;21;22;23;24;25c";
                     _writeCallback(response, strlen(response));
                 } else {
                     // Primary device attribute request (ESC[c)
                     // Respond with basic VT100 identification
-                    const char* response = "\033[?0c";
+                    const char* response = "\033[?6c";  // Indicates VT100, no microprocessor, no printer
                     _writeCallback(response, strlen(response));
                 }
             }
@@ -496,9 +515,17 @@ void VT100::executeCSI(const char* seq, int len) {
                 }
             } else if (params[0] == 6) {
                 // Report cursor position: ESC [ row ; col R
+                // Apply origin mode if set
+                int reportY = _cursorY;
+                int reportX = _cursorX;
+                if (_originMode) {
+                    // Convert to origin-relative coordinates
+                    reportY = _cursorY - _scrollTop;
+                    reportX = _cursorX;
+                }
                 if (_writeCallback) {
                     char response[32];
-                    snprintf(response, sizeof(response), "\033[%d;%dR", _cursorY + 1, _cursorX + 1);
+                    snprintf(response, sizeof(response), "\033[%d;%dR", reportY + 1, reportX + 1);
                     _writeCallback(response, strlen(response));
                 }
             }
@@ -526,6 +553,7 @@ void VT100::executeCSI(const char* seq, int len) {
 }
 
 void VT100::setCursor(int x, int y) {
+    applyOriginMode(x, y);
     _cursorX = constrain(x, 0, _cols - 1);
     _cursorY = constrain(y, 0, _rows - 1);
 }
@@ -540,40 +568,61 @@ void VT100::advanceCursor() {
 
 void VT100::newline() {
     _cursorY++;
-    if (_cursorY >= _rows) {
-        _cursorY = _rows - 1;
+    if (_cursorY > _scrollBottom) {
+        _cursorY = _scrollBottom;
         scrollUp();
     }
 }
 
 void VT100::scrollUp() {
-    // Move all lines up by one
-    memmove(_screen, _screen + _cols, (_rows - 1) * _cols);
-    memmove(_attrs, _attrs + _cols, (_rows - 1) * _cols * sizeof(VT100Attr));
-
-    // Clear bottom line
-    for (int x = 0; x < _cols; x++) {
-        setChar(' ', x, _rows - 1);
+    // Scroll within the scrolling region
+    if (_scrollTop < _scrollBottom) {
+        // Move lines up within the scrolling region
+        int lines = _scrollBottom - _scrollTop;
+        memmove(&_screen[_scrollTop * _cols], &_screen[(_scrollTop + 1) * _cols], lines * _cols * sizeof(uint16_t));
+        memmove(&_attrs[_scrollTop * _cols], &_attrs[(_scrollTop + 1) * _cols], lines * _cols * sizeof(VT100Attr));
+        
+        // Clear the bottom line of the scrolling region
+        for (int x = 0; x < _cols; x++) {
+            setChar(' ', x, _scrollBottom);
+        }
     }
 }
 
 void VT100::scrollDown() {
-    // Move all lines down by one
-    memmove(_screen + _cols, _screen, (_rows - 1) * _cols);
-    memmove(_attrs + _cols, _attrs, (_rows - 1) * _cols * sizeof(VT100Attr));
-
-    // Clear top line
-    for (int x = 0; x < _cols; x++) {
-        setChar(' ', x, 0);
+    // Scroll within the scrolling region
+    if (_scrollTop < _scrollBottom) {
+        // Move lines down within the scrolling region
+        int lines = _scrollBottom - _scrollTop;
+        memmove(&_screen[(_scrollTop + 1) * _cols], &_screen[_scrollTop * _cols], lines * _cols * sizeof(uint16_t));
+        memmove(&_attrs[(_scrollTop + 1) * _cols], &_attrs[_scrollTop * _cols], lines * _cols * sizeof(VT100Attr));
+        
+        // Clear the top line of the scrolling region
+        for (int x = 0; x < _cols; x++) {
+            setChar(' ', x, _scrollTop);
+        }
     }
 }
 
 void VT100::setChar(char c, int x, int y) {
+    applyOriginMode(x, y);
     int idx = xyToIndex(x, y);
     if (idx >= 0 && idx < _bufferSize) {
         _screen[idx] = c;
         _attrs[idx] = _currentAttr;
         _attrs[idx].graphics = _graphicsMode;
+    }
+}
+
+void VT100::applyOriginMode(int& x, int& y) const {
+    if (_originMode) {
+        // Coordinates are relative to scrolling region
+        x = constrain(x, 0, _cols - 1);
+        y = constrain(y + _scrollTop, _scrollTop, _scrollBottom);
+    } else {
+        // Coordinates are relative to full screen
+        x = constrain(x, 0, _cols - 1);
+        y = constrain(y, 0, _rows - 1);
     }
 }
 
@@ -583,6 +632,16 @@ char VT100::getChar(int x, int y) const {
         return _screen[idx];
     }
     return ' ';
+}
+
+char VT100::getCharWithOrigin(int x, int y) const {
+    applyOriginMode(x, y);
+    return getChar(x, y);
+}
+
+VT100Attr VT100::getAttrWithOrigin(int x, int y) const {
+    applyOriginMode(x, y);
+    return getAttr(x, y);
 }
 
 VT100Attr VT100::getAttr(int x, int y) const {
