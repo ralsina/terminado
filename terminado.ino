@@ -58,7 +58,7 @@ const unsigned long FLOW_CONTROL_INTERVAL = 100; // Check every 100ms
 
 void setup()
 {
-  Serial.begin(115200);
+  Serial.begin(19200); // Middle ground baud rate
 
   // Initialize I2C with slower speed for BBQ20 keyboard compatibility
   Wire.begin(19, 20);  // I2C for Elecrow ESP32-S3 HMI: SDA=IO19, SCL=IO20
