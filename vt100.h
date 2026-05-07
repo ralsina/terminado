@@ -20,11 +20,9 @@
 #define TERM_CELL_HEIGHT (8 * FONT_MULTIPLIER + 2) // +2 for line spacing
 
 // Calculate terminal size based on screen and cell size
-// Reserve one row at bottom for debug messages
 #define TERM_COLS (SCREEN_WIDTH / TERM_CELL_WIDTH)
-#define TERM_ROWS ((SCREEN_HEIGHT / TERM_CELL_HEIGHT) - 1)  // One row shorter
+#define TERM_ROWS (SCREEN_HEIGHT / TERM_CELL_HEIGHT)
 #define TERM_BUFFER_SIZE (TERM_COLS * TERM_ROWS)
-#define DEBUG_ROW (TERM_ROWS)  // The row below the terminal
 
 // VT100 colors
 enum VT100Color {

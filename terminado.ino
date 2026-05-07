@@ -55,31 +55,6 @@ const unsigned long CURSOR_BLINK_INTERVAL = 500;
 int prevCursorX = -1;
 int prevCursorY = -1;
 
-// Debug message
-String debugMessage = "";
-unsigned long debugMessageTime = 0;
-const unsigned long DEBUG_MESSAGE_DURATION = 2000; // Show for 2 seconds
-
-void setDebugMessage(const char* msg) {
-  debugMessage = msg;
-  debugMessageTime = millis();
-  renderDebugRow();
-}
-
-void renderDebugRow() {
-  int py = TERM_OFFSET_Y + DEBUG_ROW * TERM_CELL_HEIGHT;
-
-  // Clear the debug row
-  tft.fillRect(0, py, SCREEN_WIDTH, TERM_CELL_HEIGHT, TFT_BLUE);
-
-  // Draw debug message if recent
-  if (millis() - debugMessageTime < DEBUG_MESSAGE_DURATION) {
-    tft.setCursor(2, py + 1);
-    tft.setTextColor(TFT_WHITE, TFT_BLUE);
-    tft.print(debugMessage);
-  }
-}
-
 // Software flow control
 bool flowControlPaused = false;
 unsigned long lastFlowControlCheck = 0;
@@ -118,9 +93,6 @@ void setup()
   // Initialize terminal
   vt100.setWriteCallback(vt100WriteCallback);
   vt100.clearScreen();
-
-  // Debug: Show initial modifier state
-  setDebugMessage("Startup: CTRL=0 FN=0");
 
   // Report terminal size after connection is stable
   delay(500);
@@ -170,25 +142,10 @@ void loop()
     lastCursorBlink = millis();
     renderCursor();
   }
-
-  // Update debug row
-  renderDebugRow();
 }
 
 void handleKeyPress(const BBQ10Keyboard::KeyEvent &key) {
   char c = key.key;
-
-  // Debug: log EVERY key event to serial monitor for analysis
-  Serial.print("\033[47m[KEY ");
-  Serial.print((int)c);
-  Serial.print(" state:");
-  Serial.print((int)key.state);
-  Serial.print(" ctrl:");
-  Serial.print(ctrlKeyPressed);
-  Serial.print(" fn:");
-  Serial.print(fnKeyPressed);
-  Serial.print("]\033[0m");
-  Serial.write('\n');
 
   // Handle ALL key events (press and release) in state machine fashion
 
@@ -196,28 +153,18 @@ void handleKeyPress(const BBQ10Keyboard::KeyEvent &key) {
   if (c == 7) {
     if (key.state == BBQ10Keyboard::StatePress) {
       fnKeyPressed = true;
-      Serial.println("\033[46m[FN PRESSED]\033[0m");
     } else if (key.state == BBQ10Keyboard::StateRelease) {
       fnKeyPressed = false;
-      Serial.println("\033[46m[FN RELEASED]\033[0m");
     }
     return;
   }
 
   // Handle Control key state (ASCII 18)
   if (c == 18) {
-    Serial.print("\033[46m[CTRL KEY - raw state:");
-    Serial.print((int)key.state);
-    Serial.print("]\033[0m\n");
-
     if (key.state == BBQ10Keyboard::StatePress) {
       ctrlKeyPressed = true;
-      Serial.println("\033[46m[CTRL PRESSED - SET FLAG TRUE]\033[0m");
     } else if (key.state == BBQ10Keyboard::StateRelease) {
       ctrlKeyPressed = false;
-      Serial.println("\033[46m[CTRL RELEASED - SET FLAG FALSE]\033[0m");
-    } else {
-      Serial.println("\033[46m[CTRL KEY - OTHER STATE]\033[0m");
     }
     return;
   }
@@ -232,7 +179,6 @@ void handleKeyPress(const BBQ10Keyboard::KeyEvent &key) {
   switch (c) {
     case 5:    // Escape key
       Serial.write('\e');
-      Serial.println("\033[46m[ESC sent]\033[0m");
       return;
 
     case 'w':
@@ -280,29 +226,16 @@ void handleKeyPress(const BBQ10Keyboard::KeyEvent &key) {
       break;
 
     default:
-      // Debug: show exact evaluation
-      char evalBuf[64];
-      snprintf(evalBuf, sizeof(evalBuf), "c=%d ctrl=%d result=%d",
-               (int)c, (int)ctrlKeyPressed, (int)(ctrlKeyPressed && c >= 32 && c <= 126));
-      setDebugMessage(evalBuf);
-      delay(100); // Show it briefly
-
       // Handle Control key combinations
       if (ctrlKeyPressed && c >= 32 && c <= 126) {
         // Send control character (subtract 64 from ASCII value)
         Serial.write(c & 0x1F);
-        char ctrlBuf[32];
-        snprintf(ctrlBuf, sizeof(ctrlBuf), "CTRL+%c sent", c);
-        setDebugMessage(ctrlBuf);
         return;
       }
 
       // Regular characters
       if (c >= 32 && c <= 126) {
         Serial.write(c);
-        char regBuf[32];
-        snprintf(regBuf, sizeof(regBuf), "Normal %c sent", c);
-        setDebugMessage(regBuf);
       }
       break;
   }
