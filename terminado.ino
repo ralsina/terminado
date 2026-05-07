@@ -86,7 +86,11 @@ void setup()
   vt100.setWriteCallback(vt100WriteCallback);
   vt100.clearScreen();
 
-  // Clean initialization - let the host detect connection naturally
+  // Report terminal size after connection is stable
+  delay(500);
+  char sizeReport[32];
+  snprintf(sizeReport, sizeof(sizeReport), "\033[8;%d;%dt", vt100.rows(), vt100.cols());
+  Serial.write(sizeReport);
 }
 
 void loop()
@@ -141,8 +145,7 @@ void handleKeyPress(const BBQ10Keyboard::KeyEvent &key) {
   // Handle special keys
   switch (c) {
     case '\n':  // Enter key
-      Serial.write('\r');
-      Serial.write('\n');
+      Serial.write('\r');  // Just send CR, let terminal handle newline
       break;
 
     case '\b':  // Backspace
