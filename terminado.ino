@@ -24,6 +24,8 @@ const int serialBaud = 19200;
 String debugMessage = "";
 unsigned long debugMessageTime = 0;
 const unsigned long DEBUG_MESSAGE_DURATION = 3000; // Show debug for 3 seconds
+String lastStatusContent = "";  // Track last rendered content to avoid redraws
+bool statusNeedsUpdate = true;   // Flag to force update when needed
 
 // Callback for sending VT100 responses back to host
 void vt100WriteCallback(const char* data, size_t len) {
@@ -80,26 +82,31 @@ const unsigned long FLOW_CONTROL_INTERVAL = 100; // Check every 100ms
 void setStatusDebug(const char* msg) {
   debugMessage = msg;
   debugMessageTime = millis();
+  statusNeedsUpdate = true;
 }
 
 void renderStatusBar() {
-  int py = TERM_OFFSET_Y + STATUS_ROW * TERM_CELL_HEIGHT;
-
-  // Clear the status bar
-  tft.fillRect(0, py, SCREEN_WIDTH, TERM_CELL_HEIGHT, TFT_BLUE);
-
-  tft.setCursor(2, py + 1);
-  tft.setTextColor(TFT_WHITE, TFT_BLUE);
-
-  // Show debug message if active, otherwise show status info
+  // Determine what content to show
+  String currentContent;
   if (millis() - debugMessageTime < DEBUG_MESSAGE_DURATION && debugMessage.length() > 0) {
-    tft.print("DEBUG: ");
-    tft.print(debugMessage);
+    currentContent = "DEBUG: " + debugMessage;
   } else {
-    tft.print(terminalTitle);
-    tft.print(" | ");
-    tft.print(serialBaud);
-    tft.print(" baud");
+    currentContent = terminalTitle + " | " + String(serialBaud) + " baud";
+  }
+
+  // Only redraw if content changed
+  if (currentContent != lastStatusContent || statusNeedsUpdate) {
+    lastStatusContent = currentContent;
+    statusNeedsUpdate = false;
+
+    int py = TERM_OFFSET_Y + STATUS_ROW * TERM_CELL_HEIGHT;
+
+    // Clear the status bar
+    tft.fillRect(0, py, SCREEN_WIDTH, TERM_CELL_HEIGHT, TFT_BLUE);
+
+    tft.setCursor(2, py + 1);
+    tft.setTextColor(TFT_WHITE, TFT_BLUE);
+    tft.print(currentContent);
   }
 }
 
