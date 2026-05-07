@@ -81,8 +81,9 @@ void setup()
   vt100.setWriteCallback(vt100WriteCallback);
   vt100.clearScreen();
 
-  // Clean initialization - no serial output
-  // To reconnect after ESP32 reset: restart getty with: sudo systemctl restart getty@ttyUSB0
+  // Report terminal size to help system understand our dimensions
+  delay(200); // Give serial connection time to stabilize
+  Serial.write("\033[8;48;88t"); // Report size as 48 rows x 88 columns
 }
 
 void loop()
