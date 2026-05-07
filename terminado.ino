@@ -218,9 +218,9 @@ void renderChar(int x, int y, char c) {
 
   // Only draw character if it's not a space
   if (c != ' ') {
-    // Center character in the cell using calculated positioning
+    // Position character in cell (1px down for better centering)
     int charOffset = FONT_MULTIPLIER > 1 ? 1 : 0;
-    tft.setCursor(px + charOffset, py + charOffset);
+    tft.setCursor(px + charOffset, py + 1); // Always move 1px down
     tft.setTextColor(fg, bg);
     tft.print(c);
   }
