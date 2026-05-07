@@ -142,8 +142,25 @@ void loop()
 void handleKeyPress(const BBQ10Keyboard::KeyEvent &key) {
   char c = key.key;
 
-  // Handle special keys
+  // Special key mappings for arrow keys
+  // 6 = left, 17 = down, 7 = up, 18 = right
   switch (c) {
+    case 7:   // Up arrow
+      Serial.write("\033[A");
+      return;
+
+    case 17:  // Down arrow
+      Serial.write("\033[B");
+      return;
+
+    case 6:   // Left arrow
+      Serial.write("\033[D");
+      return;
+
+    case 18:  // Right arrow
+      Serial.write("\033[C");
+      return;
+
     case '\n':  // Enter key
       Serial.write('\r');  // Just send CR, let terminal handle newline
       break;
