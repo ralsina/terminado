@@ -146,23 +146,33 @@ void loop()
 void handleKeyPress(const BBQ10Keyboard::KeyEvent &key) {
   char c = key.key;
 
+  // Only process key press events, ignore releases for regular keys
+  if (key.state != BBQ10Keyboard::StatePress && key.state != BBQ10Keyboard::StateLongPress) {
+    // Still process Fn and Control key release events
+    if (c == 7) {  // Fn key
+      if (key.state == BBQ10Keyboard::StateRelease) {
+        fnKeyPressed = false;
+      }
+      return;
+    }
+    if (c == 18) {  // Control key
+      if (key.state == BBQ10Keyboard::StateRelease) {
+        ctrlKeyPressed = false;
+      }
+      return;
+    }
+    return;  // Ignore all other release events
+  }
+
   // Handle Fn key state (ASCII 7)
   if (c == 7) {
-    if (key.state == BBQ10Keyboard::StatePress) {
-      fnKeyPressed = true;
-    } else if (key.state == BBQ10Keyboard::StateRelease) {
-      fnKeyPressed = false;
-    }
+    fnKeyPressed = true;
     return;
   }
 
   // Handle Control key state (ASCII 18)
   if (c == 18) {
-    if (key.state == BBQ10Keyboard::StatePress) {
-      ctrlKeyPressed = true;
-    } else if (key.state == BBQ10Keyboard::StateRelease) {
-      ctrlKeyPressed = false;
-    }
+    ctrlKeyPressed = true;
     return;
   }
 
