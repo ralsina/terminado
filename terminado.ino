@@ -11,10 +11,10 @@ Description	:	VT100 terminal emulator with BBQ20 keyboard and serial communicati
 #include <BBQ10Keyboard.h>
 #include "term_config.h"
 #include "vt100.h"
-#include "iosekva.h"
-#include "iosekva_bold.h"
-#include "iosekva_italic.h"
-#include "iosekva_bolditalic.h"
+#include "iosevka.h"
+#include "iosevka_bold.h"
+#include "iosevka_italic.h"
+#include "iosevka_bolditalic.h"
 
 BBQ10Keyboard keyboard;
 VT100 vt100;
