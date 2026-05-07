@@ -241,6 +241,11 @@ void handleKeyPress(const BBQ10Keyboard::KeyEvent &key) {
         Serial.write("\033[A");  // Up arrow
         return;
       }
+      // Check for Control key before sending normal character
+      if (ctrlKeyPressed) {
+        Serial.write(c & 0x1F);  // Ctrl+W
+        return;
+      }
       Serial.write('w');  // Send normal 'w' when Fn not pressed
       break;
 
@@ -248,6 +253,11 @@ void handleKeyPress(const BBQ10Keyboard::KeyEvent &key) {
     case 'A':
       if (fnKeyPressed) {
         Serial.write("\033[D");  // Left arrow
+        return;
+      }
+      // Check for Control key before sending normal character
+      if (ctrlKeyPressed) {
+        Serial.write(c & 0x1F);  // Ctrl+A
         return;
       }
       Serial.write('a');  // Send normal 'a' when Fn not pressed
@@ -259,6 +269,11 @@ void handleKeyPress(const BBQ10Keyboard::KeyEvent &key) {
         Serial.write("\033[B");  // Down arrow
         return;
       }
+      // Check for Control key before sending normal character
+      if (ctrlKeyPressed) {
+        Serial.write(c & 0x1F);  // Ctrl+S
+        return;
+      }
       Serial.write('s');  // Send normal 's' when Fn not pressed
       break;
 
@@ -266,6 +281,11 @@ void handleKeyPress(const BBQ10Keyboard::KeyEvent &key) {
     case 'D':
       if (fnKeyPressed) {
         Serial.write("\033[C");  // Right arrow
+        return;
+      }
+      // Check for Control key before sending normal character
+      if (ctrlKeyPressed) {
+        Serial.write(c & 0x1F);  // Ctrl+D
         return;
       }
       Serial.write('d');  // Send normal 'd' when Fn not pressed
@@ -287,7 +307,16 @@ void handleKeyPress(const BBQ10Keyboard::KeyEvent &key) {
       // Handle Control key combinations
       if (ctrlKeyPressed && c >= 32 && c <= 126) {
         // Send control character (subtract 64 from ASCII value)
-        Serial.write(c & 0x1F);
+        char ctrlChar = c & 0x1F;
+
+        // Debug: show what we're sending
+        String debugMsg = "CTRL+";
+        debugMsg += c;
+        debugMsg += " = ";
+        debugMsg += (int)ctrlChar;
+        setStatusDebug(debugMsg.c_str());
+
+        Serial.write(ctrlChar);
         return;
       }
 
