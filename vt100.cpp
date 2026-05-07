@@ -505,32 +505,15 @@ void VT100::executeCSI(const char* seq, int len) {
             break;
 
         case 't':  // Window manipulation
-            // DEBUG: Print to multiple locations to make it visible
             if (params[0] == 18) {
-                // DEBUG: Show we got here by filling row 2 with 'X'
-                for (int i = 0; i < _cols; i++) {
-                    setChar('X', i, 2);
-                }
-                // Report terminal size: try exact format from working terminal
                 if (_writeCallback) {
-                    // Try without space: ESC[8;48;88t
                     char response[32];
                     snprintf(response, sizeof(response), "\033[8;%d;%dt", _rows, _cols);
                     _writeCallback(response, strlen(response));
-                    // DEBUG: Fill row 3 with 'Y' to show we sent it
-                    for (int i = 0; i < _cols; i++) {
-                        setChar('Y', i, 3);
-                    }
                 }
             } else {
-                // DEBUG: Show other params
-                for (int i = 0; i < 10; i++) {
-                    setChar('0' + (params[0] / 10), i, 0);
-                    setChar('0' + (params[0] % 10), i, 1);
-                }
-                // Respond to other 't' queries to avoid confusion
                 if (_writeCallback) {
-                    const char* response = "\033[0t"; // Default response
+                    const char* response = "\033[0t";
                     _writeCallback(response, strlen(response));
                 }
             }
