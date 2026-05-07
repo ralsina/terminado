@@ -14,9 +14,12 @@ Description	:	VT100 terminal emulator with BBQ20 keyboard and serial communicati
 BBQ10Keyboard keyboard;
 VT100 vt100;
 
-// Modifier key states
+// Modifier key states with timeout
 bool fnKeyPressed = false;
 bool ctrlKeyPressed = false;
+unsigned long fnKeyTime = 0;
+unsigned long ctrlKeyTime = 0;
+const unsigned long MODIFIER_TIMEOUT = 1000; // 1 second timeout
 
 // Callback for sending VT100 responses back to host
 void vt100WriteCallback(const char* data, size_t len) {
@@ -99,6 +102,14 @@ void setup()
 
 void loop()
 {
+  // Check modifier key timeouts
+  if (fnKeyPressed && millis() - fnKeyTime > MODIFIER_TIMEOUT) {
+    fnKeyPressed = false;
+  }
+  if (ctrlKeyPressed && millis() - ctrlKeyTime > MODIFIER_TIMEOUT) {
+    ctrlKeyPressed = false;
+  }
+
   // Check serial buffer level for flow control
   if (millis() - lastFlowControlCheck > FLOW_CONTROL_INTERVAL) {
     int bufferAvailable = Serial.available();
@@ -146,33 +157,21 @@ void loop()
 void handleKeyPress(const BBQ10Keyboard::KeyEvent &key) {
   char c = key.key;
 
-  // Only process key press events, ignore releases for regular keys
-  if (key.state != BBQ10Keyboard::StatePress && key.state != BBQ10Keyboard::StateLongPress) {
-    // Still process Fn and Control key release events
-    if (c == 7) {  // Fn key
-      if (key.state == BBQ10Keyboard::StateRelease) {
-        fnKeyPressed = false;
-      }
-      return;
-    }
-    if (c == 18) {  // Control key
-      if (key.state == BBQ10Keyboard::StateRelease) {
-        ctrlKeyPressed = false;
-      }
-      return;
-    }
-    return;  // Ignore all other release events
-  }
-
   // Handle Fn key state (ASCII 7)
   if (c == 7) {
-    fnKeyPressed = true;
+    if (key.state == BBQ10Keyboard::StatePress) {
+      fnKeyPressed = true;
+      fnKeyTime = millis();
+    }
     return;
   }
 
   // Handle Control key state (ASCII 18)
   if (c == 18) {
-    ctrlKeyPressed = true;
+    if (key.state == BBQ10Keyboard::StatePress) {
+      ctrlKeyPressed = true;
+      ctrlKeyTime = millis();
+    }
     return;
   }
 
