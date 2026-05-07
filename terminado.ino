@@ -11,10 +11,10 @@ Description	:	VT100 terminal emulator with BBQ20 keyboard and serial communicati
 #include <BBQ10Keyboard.h>
 #include "term_config.h"
 #include "vt100.h"
-#include "iosekva_8pt.h"
-#include "iosekva_bold_8pt.h"
-#include "iosekva_italic_8pt.h"
-#include "iosekva_bolditalic_8pt.h"
+#include "iosekva.h"
+#include "iosekva_bold.h"
+#include "iosekva_italic.h"
+#include "iosekva_bolditalic.h"
 
 BBQ10Keyboard keyboard;
 VT100 vt100;
@@ -95,7 +95,7 @@ void configureTerminalGeometryFromFont() {
   int glyphVisualHeight = baseHeight;
 
   #if USE_CUSTOM_FONT
-  const GFXfont* selectedFont = &IosevkaNerdFontMono_Regular8pt8b;
+  const GFXfont* selectedFont = &IosevkaNerdFontMono_Regular7pt8b;
   tft.setFont(selectedFont);
 
   uint16_t metricFirst = max(static_cast<uint16_t>(selectedFont->first), static_cast<uint16_t>(0x20));
@@ -240,7 +240,7 @@ void renderStatusBar() {
 
 void setup()
 {
-  Serial.begin(19200); // Middle ground baud rate
+  Serial.begin(serialBaud); // Middle ground baud rate
 
   // Explicitly initialize modifier states
   fnKeyPressed = false;
@@ -651,19 +651,19 @@ void renderChar(int x, int y, char c) {
     } else {
       #if USE_CUSTOM_FONT
       if (attr.bold && attr.italic)
-        tft.setFont(&IosevkaNerdFontMono_BoldItalic8pt8b);
+        tft.setFont(&IosevkaNerdFontMono_BoldItalic7pt8b);
       else if (attr.bold)
-        tft.setFont(&IosevkaNerdFontMono_Bold8pt8b);
+        tft.setFont(&IosevkaNerdFontMono_Bold7pt8b);
       else if (attr.italic)
-        tft.setFont(&IosevkaNerdFontMono_Italic8pt8b);
+        tft.setFont(&IosevkaNerdFontMono_Italic7pt8b);
       else
-        tft.setFont(&IosevkaNerdFontMono_Regular8pt8b);
+        tft.setFont(&IosevkaNerdFontMono_Regular7pt8b);
       #endif
       tft.setCursor(px + termCharOffsetX, py + termCharOffsetY);
       tft.setTextColor(fg, bg);
       tft.print(printable);
       #if USE_CUSTOM_FONT
-      tft.setFont(&IosevkaNerdFontMono_Regular8pt8b);  // restore default
+      tft.setFont(&IosevkaNerdFontMono_Regular7pt8b);  // restore default
       #endif
     }
   }
