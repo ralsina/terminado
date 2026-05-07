@@ -83,6 +83,7 @@ char lastRepeatedKey = '\0';
 unsigned long lastRepeatTime = 0;
 const unsigned long AUTOREPEAT_DELAY = 500;    // Initial delay before repeat (ms)
 const unsigned long AUTOREPEAT_RATE = 100;     // Repeat rate (ms)
+bool keyIsHeld = false;  // Track if key is currently held down
 
 // Status bar functions
 void setStatusDebug(const char* msg) {
@@ -200,6 +201,17 @@ void loop()
     renderCursor();
   }
 
+  // Handle autorepeat for held keys
+  if (keyIsHeld && lastRepeatedKey != '\0') {
+    unsigned long now = millis();
+    if (now - lastRepeatTime > AUTOREPEAT_RATE) {
+      // Time to repeat the key
+      setStatusDebug("REPEAT");
+      processKeyCharacter(lastRepeatedKey);
+      lastRepeatTime = now;
+    }
+  }
+
   // Update status bar
   renderStatusBar();
 }
@@ -233,20 +245,17 @@ void handleKeyPress(const BBQ10Keyboard::KeyEvent &key) {
   if (key.state == BBQ10Keyboard::StateRelease) {
     if (c == lastRepeatedKey) {
       lastRepeatedKey = '\0';  // Stop repeating this key
+      keyIsHeld = false;
     }
     return;
   }
 
-  // Handle LongPress events for autorepeat
+  // Handle LongPress events - mark key as held
   if (key.state == BBQ10Keyboard::StateLongPress) {
-    // Only repeat certain keys (letters, numbers, basic punctuation)
     if ((c >= 32 && c <= 126) && c != 7 && c != 18 && c != 5) {
-      if (c == lastRepeatedKey && millis() - lastRepeatTime > AUTOREPEAT_RATE) {
-        // This is a continued long press - repeat the key
-        setStatusDebug("REPEAT");
-        processKeyCharacter(c);
-        lastRepeatTime = millis();
-        return;
+      if (c == lastRepeatedKey) {
+        keyIsHeld = true;
+        lastRepeatTime = millis();  // Reset timing for continuous repeat
       }
     }
     return;
@@ -257,6 +266,7 @@ void handleKeyPress(const BBQ10Keyboard::KeyEvent &key) {
     // Track this key for potential autorepeat
     if ((c >= 32 && c <= 126) && c != 7 && c != 18 && c != 5) {
       lastRepeatedKey = c;
+      keyIsHeld = false;  // Not yet held, just pressed
       lastRepeatTime = millis();
     }
     // Process the key normally
