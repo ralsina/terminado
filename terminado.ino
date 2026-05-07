@@ -161,10 +161,7 @@ void loop()
   const int keyCount = keyboard.keyCount();
   if (keyCount > 0) {
     const BBQ10Keyboard::KeyEvent key = keyboard.keyEvent();
-
-    if (key.state == BBQ10Keyboard::StatePress) {
-      handleKeyPress(key);
-    }
+    handleKeyPress(key);  // Process ALL key events
   }
 
   // Handle cursor blinking
@@ -209,12 +206,18 @@ void handleKeyPress(const BBQ10Keyboard::KeyEvent &key) {
 
   // Handle Control key state (ASCII 18)
   if (c == 18) {
+    Serial.print("\033[46m[CTRL KEY - raw state:");
+    Serial.print((int)key.state);
+    Serial.print("]\033[0m\n");
+
     if (key.state == BBQ10Keyboard::StatePress) {
       ctrlKeyPressed = true;
-      Serial.println("\033[46m[CTRL PRESSED]\033[0m");
+      Serial.println("\033[46m[CTRL PRESSED - SET FLAG TRUE]\033[0m");
     } else if (key.state == BBQ10Keyboard::StateRelease) {
       ctrlKeyPressed = false;
-      Serial.println("\033[46m[CTRL RELEASED]\033[0m");
+      Serial.println("\033[46m[CTRL RELEASED - SET FLAG FALSE]\033[0m");
+    } else {
+      Serial.println("\033[46m[CTRL KEY - OTHER STATE]\033[0m");
     }
     return;
   }
