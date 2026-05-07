@@ -74,15 +74,15 @@ void setup()
   tft.setCursor(200, 240);
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
   tft.print("VT100 Terminal Ready");
-  delay(1000);
+  delay(500);
   tft.fillScreen(TFT_BLACK);
 
   // Initialize terminal
   vt100.setWriteCallback(vt100WriteCallback);
   vt100.clearScreen();
 
-  Serial.println("VT100 Terminal Emulator Ready");
-  Serial.println("Send terminal data via Serial at 115200 baud");
+  // Clean initialization - no serial output
+  // To reconnect after ESP32 reset: restart getty with: sudo systemctl restart getty@ttyUSB0
 }
 
 void loop()
