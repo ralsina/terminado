@@ -14,6 +14,10 @@ Description	:	VT100 terminal emulator with BBQ20 keyboard and serial communicati
 BBQ10Keyboard keyboard;
 VT100 vt100;
 
+// Modifier key states
+bool fnKeyPressed = false;
+bool ctrlKeyPressed = false;
+
 // Callback for sending VT100 responses back to host
 void vt100WriteCallback(const char* data, size_t len) {
   Serial.write(data, len);
@@ -142,28 +146,64 @@ void loop()
 void handleKeyPress(const BBQ10Keyboard::KeyEvent &key) {
   char c = key.key;
 
+  // Handle Fn key state (ASCII 7)
+  if (c == 7) {
+    if (key.state == BBQ10Keyboard::StatePress) {
+      fnKeyPressed = true;
+    } else if (key.state == BBQ10Keyboard::StateRelease) {
+      fnKeyPressed = false;
+    }
+    return;
+  }
+
+  // Handle Control key state (ASCII 18)
+  if (c == 18) {
+    if (key.state == BBQ10Keyboard::StatePress) {
+      ctrlKeyPressed = true;
+    } else if (key.state == BBQ10Keyboard::StateRelease) {
+      ctrlKeyPressed = false;
+    }
+    return;
+  }
+
   // Special key mappings for BBQ20 keyboard
-  // 5 = escape, 6 = left, 17 = down, 7 = up, 18 = right
+  // 5 = escape, 6 = left, 17 = down, 18 = control, 7 = Fn
   switch (c) {
     case 5:    // Escape key
       Serial.write('\e');
       return;
 
-    case 7:   // Up arrow
-      Serial.write("\033[A");
-      return;
+    case 'w':
+    case 'W':
+      if (fnKeyPressed) {
+        Serial.write("\033[A");  // Up arrow
+        return;
+      }
+      break;
 
-    case 17:  // Down arrow
-      Serial.write("\033[B");
-      return;
+    case 'a':
+    case 'A':
+      if (fnKeyPressed) {
+        Serial.write("\033[D");  // Left arrow
+        return;
+      }
+      break;
 
-    case 6:   // Left arrow
-      Serial.write("\033[D");
-      return;
+    case 's':
+    case 'S':
+      if (fnKeyPressed) {
+        Serial.write("\033[B");  // Down arrow
+        return;
+      }
+      break;
 
-    case 18:  // Right arrow
-      Serial.write("\033[C");
-      return;
+    case 'd':
+    case 'D':
+      if (fnKeyPressed) {
+        Serial.write("\033[C");  // Right arrow
+        return;
+      }
+      break;
 
     case '\n':  // Enter key
       Serial.write('\r');  // Just send CR, let terminal handle newline
@@ -178,6 +218,13 @@ void handleKeyPress(const BBQ10Keyboard::KeyEvent &key) {
       break;
 
     default:
+      // Handle Control key combinations
+      if (ctrlKeyPressed && c >= 32 && c <= 126) {
+        // Send control character (subtract 64 from ASCII value)
+        Serial.write(c & 0x1F);
+        return;
+      }
+
       // Regular characters
       if (c >= 32 && c <= 126) {
         Serial.write(c);
