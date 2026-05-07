@@ -51,6 +51,11 @@ const unsigned long CURSOR_BLINK_INTERVAL = 500;
 int prevCursorX = -1;
 int prevCursorY = -1;
 
+// Software flow control
+bool flowControlPaused = false;
+unsigned long lastFlowControlCheck = 0;
+const unsigned long FLOW_CONTROL_INTERVAL = 100; // Check every 100ms
+
 void setup()
 {
   Serial.begin(115200);
@@ -81,19 +86,34 @@ void setup()
   vt100.setWriteCallback(vt100WriteCallback);
   vt100.clearScreen();
 
-  // Report terminal size to help system understand our dimensions
-  delay(200); // Give serial connection time to stabilize
-  Serial.write("\033[8;48;88t"); // Report size as 48 rows x 88 columns
+  // Clean initialization - let the host detect connection naturally
 }
 
 void loop()
 {
+  // Check serial buffer level for flow control
+  if (millis() - lastFlowControlCheck > FLOW_CONTROL_INTERVAL) {
+    int bufferAvailable = Serial.available();
+    if (bufferAvailable > 500 && !flowControlPaused) {
+      // Buffer getting full, pause transmission
+      Serial.write(0x13); // XOFF (DC3)
+      flowControlPaused = true;
+    } else if (bufferAvailable < 100 && flowControlPaused) {
+      // Buffer has space, resume transmission
+      Serial.write(0x11); // XON (DC1)
+      flowControlPaused = false;
+    }
+    lastFlowControlCheck = millis();
+  }
+
   // Handle incoming serial data (from host to terminal)
   if (Serial.available()) {
+    // Process all available data as fast as possible
     while (Serial.available()) {
       char c = Serial.read();
       vt100.process(c);
     }
+    // Only render once per batch of data
     renderTerminal();
   }
 
