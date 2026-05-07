@@ -9,7 +9,12 @@ Description	:	VT100 terminal emulator with BBQ20 keyboard and serial communicati
 #include <SPI.h>
 #include "gfx_conf.h"
 #include <BBQ10Keyboard.h>
+#include "term_config.h"
 #include "vt100.h"
+#include "iosekva_8pt.h"
+#include "iosekva_bold_8pt.h"
+#include "iosekva_italic_8pt.h"
+#include "iosekva_bolditalic_8pt.h"
 
 BBQ10Keyboard keyboard;
 VT100 vt100;
@@ -40,17 +45,6 @@ void vt100TitleCallback(const char* title) {
     terminalTitle = terminalTitle.substring(0, 30) + "...";
   }
 }
-
-// Display configuration - set multiplier and everything is calculated
-#define FONT_MULTIPLIER 1  // 1x scaling for smaller text (more columns)
-#define SCREEN_WIDTH 800
-#define SCREEN_HEIGHT 480
-
-// Calculate cell size from font multiplier (Font0 base is 8x8 pixels)
-#define TERM_CELL_WIDTH (8 * FONT_MULTIPLIER + 1)  // +1 for spacing
-#define TERM_CELL_HEIGHT (8 * FONT_MULTIPLIER + 2) // +2 for line spacing
-#define TERM_OFFSET_X 0
-#define TERM_OFFSET_Y 0
 
 // Color mapping for ANSI colors
 static const uint32_t ansi_colors[8] = {
@@ -85,6 +79,133 @@ const unsigned long AUTOREPEAT_DELAY = 500;    // Initial delay before repeat (m
 const unsigned long AUTOREPEAT_RATE = 100;     // Repeat rate (ms)
 bool keyIsHeld = false;  // Track if key is currently held down
 
+int termCellWidth = TERM_DEFAULT_CELL_WIDTH;
+int termCellHeight = TERM_DEFAULT_CELL_HEIGHT;
+uint16_t termFontFirst = 0x20;
+uint16_t termFontLast = 0x7E;
+int termCharOffsetX = 0;
+int termCharOffsetY = 1;
+
+void configureTerminalGeometryFromFont() {
+  uint8_t baseWidth = TERM_DEFAULT_BASE_WIDTH;
+  uint8_t baseHeight = TERM_DEFAULT_BASE_HEIGHT;
+  int glyphMinX = 0;
+  int glyphMinY = 0;
+  int glyphVisualWidth = baseWidth;
+  int glyphVisualHeight = baseHeight;
+
+  #if USE_CUSTOM_FONT
+  const GFXfont* selectedFont = &IosevkaNerdFontMono_Regular8pt8b;
+  tft.setFont(selectedFont);
+
+  uint16_t metricFirst = max(static_cast<uint16_t>(selectedFont->first), static_cast<uint16_t>(0x20));
+  uint16_t metricLast = min(static_cast<uint16_t>(selectedFont->last), static_cast<uint16_t>(0x7E));
+  if (metricLast < metricFirst) {
+    metricFirst = selectedFont->first;
+    metricLast = selectedFont->last;
+  }
+
+  termFontFirst = metricFirst;
+  termFontLast = metricLast;
+  baseHeight = selectedFont->yAdvance;
+
+  int minX = 0;
+  int maxX = 0;
+  int maxAscent = 0;
+  int maxDescent = 0;
+  uint8_t maxAdvance = 0;
+  bool haveGlyphBounds = false;
+
+  for (uint16_t codepoint = metricFirst; codepoint <= metricLast; codepoint++) {
+    const GFXglyph* glyph = &selectedFont->glyph[codepoint - selectedFont->first];
+
+    if (glyph->xAdvance > maxAdvance) {
+      maxAdvance = glyph->xAdvance;
+    }
+
+    if (glyph->width == 0 || glyph->height == 0) {
+      continue;
+    }
+
+    int glyphLeft = glyph->xOffset;
+    int glyphRight = glyph->xOffset + glyph->width;
+    int glyphTop = glyph->yOffset;
+    int glyphBottom = glyph->yOffset + glyph->height;
+
+    if (!haveGlyphBounds) {
+      minX = glyphLeft;
+      maxX = glyphRight;
+      maxAscent = max(0, -glyphTop);
+      maxDescent = max(0, glyphBottom);
+      haveGlyphBounds = true;
+      continue;
+    }
+
+    minX = min(minX, glyphLeft);
+    maxX = max(maxX, glyphRight);
+    maxAscent = max(maxAscent, max(0, -glyphTop));
+    maxDescent = max(maxDescent, max(0, glyphBottom));
+  }
+
+  if (maxAdvance > 0) {
+    baseWidth = maxAdvance;
+  }
+
+  if (haveGlyphBounds) {
+    glyphMinX = minX;
+    glyphVisualWidth = max(static_cast<int>(baseWidth), maxX - minX);
+    glyphVisualHeight = max(static_cast<int>(baseHeight), maxAscent + maxDescent);
+    termCharOffsetX = max(0, -minX) * FONT_MULTIPLIER;
+    termCharOffsetY = TERM_CELL_VPAD / 2;
+  }
+  #else
+  tft.setFont(&fonts::Font0);
+  termFontFirst = 0x20;
+  termFontLast = 0x7E;
+  #endif
+
+  tft.setTextSize(FONT_MULTIPLIER);
+
+  int scaledGlyphWidth = glyphVisualWidth * FONT_MULTIPLIER;
+  int scaledGlyphHeight = glyphVisualHeight * FONT_MULTIPLIER;
+  int scaledAdvanceWidth = baseWidth * FONT_MULTIPLIER;
+  int scaledAdvanceHeight = baseHeight * FONT_MULTIPLIER;
+
+  termCellWidth = max(scaledAdvanceWidth, scaledGlyphWidth) + TERM_CELL_HPAD;
+  termCellHeight = max(scaledAdvanceHeight, scaledGlyphHeight) + TERM_CELL_VPAD;
+
+  #if USE_CUSTOM_FONT
+  termCharOffsetX += TERM_CELL_HPAD / 2;
+  #else
+  termCharOffsetX = TERM_CELL_HPAD / 2;
+  termCharOffsetY = 1;
+  #endif
+
+  int runtimeCols = SCREEN_WIDTH / termCellWidth;
+  int runtimeRows = (SCREEN_HEIGHT / termCellHeight) - 1;
+  runtimeCols = constrain(runtimeCols, 1, MAX_TERM_COLS);
+  runtimeRows = constrain(runtimeRows, 1, MAX_TERM_ROWS);
+  vt100.setGeometry(runtimeCols, runtimeRows);
+}
+
+static inline uint8_t clampAnsiIndex(int value) {
+  if (value < 0) {
+    return 0;
+  }
+  if (value > 7) {
+    return 7;
+  }
+  return static_cast<uint8_t>(value);
+}
+
+static inline char sanitizeGlyph(char c) {
+  uint16_t glyph = static_cast<uint8_t>(c);
+  if (glyph < termFontFirst || glyph > termFontLast) {
+    return ' ';
+  }
+  return static_cast<char>(glyph);
+}
+
 // Status bar functions
 void setStatusDebug(const char* msg) {
   debugMessage = msg;
@@ -106,10 +227,10 @@ void renderStatusBar() {
     lastStatusContent = currentContent;
     statusNeedsUpdate = false;
 
-    int py = TERM_OFFSET_Y + STATUS_ROW * TERM_CELL_HEIGHT;
+    int py = TERM_OFFSET_Y + vt100.rows() * termCellHeight;
 
     // Clear the status bar
-    tft.fillRect(0, py, SCREEN_WIDTH, TERM_CELL_HEIGHT, TFT_BLUE);
+    tft.fillRect(0, py, SCREEN_WIDTH, termCellHeight, TFT_BLUE);
 
     tft.setCursor(2, py + 1);
     tft.setTextColor(TFT_WHITE, TFT_BLUE);
@@ -136,8 +257,6 @@ void setup()
   // Display Prepare
   tft.begin();
   tft.setRotation(2); // Flip screen vertically (180 degree rotation)
-  tft.setFont(&fonts::Font0); // Use built-in Font0 for terminal display
-  tft.setTextSize(FONT_MULTIPLIER); // Use configured multiplier
   tft.fillScreen(TFT_BLACK);
 
   // Draw title
@@ -146,6 +265,9 @@ void setup()
   tft.print("VT100 Terminal Ready");
   delay(500);
   tft.fillScreen(TFT_BLACK);
+
+  // Set font and runtime geometry AFTER library is initialized.
+  configureTerminalGeometryFromFont();
 
   // Initialize terminal
   vt100.setWriteCallback(vt100WriteCallback);
@@ -382,8 +504,8 @@ void processKeyCharacter(char c) {
 }
 
 void renderTerminal() {
-  static char lastScreen[TERM_COLS * TERM_ROWS];
-  static VT100Attr lastAttrs[TERM_COLS * TERM_ROWS];
+  static char lastScreen[MAX_TERM_BUFFER_SIZE];
+  static VT100Attr lastAttrs[MAX_TERM_BUFFER_SIZE];
   static bool initialized = false;
 
   if (!initialized) {
@@ -425,17 +547,87 @@ void renderTerminal() {
   renderCursor();
 }
 
+// Draw a VT100 line-drawing character using primitives.
+// c is the ASCII letter used in graphics mode (e.g. 'q' = horizontal line).
+void drawLineDrawingChar(int px, int py, char c, uint32_t fg) {
+  int cx = px + termCellWidth / 2;   // horizontal center of cell
+  int cy = py + termCellHeight / 2;  // vertical center of cell
+  int r = px + termCellWidth - 1;    // right edge
+  int b = py + termCellHeight - 1;   // bottom edge
+
+  switch (c) {
+    case 'q':  // ─ horizontal line
+      tft.drawFastHLine(px, cy, termCellWidth, fg);
+      break;
+    case 'x':  // │ vertical line
+      tft.drawFastVLine(cx, py, termCellHeight, fg);
+      break;
+    case 'j':  // ┘ lower-right corner
+      tft.drawFastHLine(px, cy, cx - px + 1, fg);
+      tft.drawFastVLine(cx, py, cy - py + 1, fg);
+      break;
+    case 'k':  // ┐ upper-right corner
+      tft.drawFastHLine(px, cy, cx - px + 1, fg);
+      tft.drawFastVLine(cx, cy, b - cy + 1, fg);
+      break;
+    case 'l':  // ┌ upper-left corner
+      tft.drawFastHLine(cx, cy, r - cx + 1, fg);
+      tft.drawFastVLine(cx, cy, b - cy + 1, fg);
+      break;
+    case 'm':  // └ lower-left corner
+      tft.drawFastHLine(cx, cy, r - cx + 1, fg);
+      tft.drawFastVLine(cx, py, cy - py + 1, fg);
+      break;
+    case 'n':  // ┼ cross
+      tft.drawFastHLine(px, cy, termCellWidth, fg);
+      tft.drawFastVLine(cx, py, termCellHeight, fg);
+      break;
+    case 't':  // ├ T right
+      tft.drawFastHLine(cx, cy, r - cx + 1, fg);
+      tft.drawFastVLine(cx, py, termCellHeight, fg);
+      break;
+    case 'u':  // ┤ T left
+      tft.drawFastHLine(px, cy, cx - px + 1, fg);
+      tft.drawFastVLine(cx, py, termCellHeight, fg);
+      break;
+    case 'v':  // ┴ T up
+      tft.drawFastHLine(px, cy, termCellWidth, fg);
+      tft.drawFastVLine(cx, py, cy - py + 1, fg);
+      break;
+    case 'w':  // ┬ T down
+      tft.drawFastHLine(px, cy, termCellWidth, fg);
+      tft.drawFastVLine(cx, cy, b - cy + 1, fg);
+      break;
+    case 'a':  // ▒ checkerboard (stipple)
+      for (int row = py; row <= b; row += 2) {
+        for (int col = (row % 4 == 0) ? px : px + 1; col <= r; col += 2) {
+          tft.drawPixel(col, row, fg);
+        }
+      }
+      break;
+    case '`':  // ◆ diamond — draw as small diamond
+      tft.drawLine(cx, py + 2, r - 2, cy, fg);
+      tft.drawLine(r - 2, cy, cx, b - 2, fg);
+      tft.drawLine(cx, b - 2, px + 2, cy, fg);
+      tft.drawLine(px + 2, cy, cx, py + 2, fg);
+      break;
+    default:
+      break;  // unknown graphics char — draw nothing
+  }
+}
+
 void renderChar(int x, int y, char c) {
   // Get character attributes
   VT100Attr attr = vt100.getAttr(x, y);
+  char printable = sanitizeGlyph(c);
 
   // Calculate position
-  int px = TERM_OFFSET_X + x * TERM_CELL_WIDTH;
-  int py = TERM_OFFSET_Y + y * TERM_CELL_HEIGHT;
+  int px = TERM_OFFSET_X + x * termCellWidth;
+  int py = TERM_OFFSET_Y + y * termCellHeight;
 
   // Get colors
-  uint32_t fg = ansi_colors[attr.fg];
-  uint32_t bg = ansi_colors[attr.bg];
+  uint32_t fg = ansi_colors[clampAnsiIndex(attr.fg)];
+  uint32_t bg = ansi_colors[clampAnsiIndex(attr.bg)];
 
   // Handle reverse video
   if (attr.reverse) {
@@ -450,15 +642,30 @@ void renderChar(int x, int y, char c) {
   }
 
   // Always fill background first (important for empty cells)
-  tft.fillRect(px, py, TERM_CELL_WIDTH, TERM_CELL_HEIGHT, bg);
+  tft.fillRect(px, py, termCellWidth, termCellHeight, bg);
 
   // Only draw character if it's not a space
-  if (c != ' ') {
-    // Position character in cell (1px down for better centering)
-    int charOffset = FONT_MULTIPLIER > 1 ? 1 : 0;
-    tft.setCursor(px + charOffset, py + 1); // Always move 1px down
-    tft.setTextColor(fg, bg);
-    tft.print(c);
+  if (printable != ' ') {
+    if (attr.graphics) {
+      drawLineDrawingChar(px, py, printable, fg);
+    } else {
+      #if USE_CUSTOM_FONT
+      if (attr.bold && attr.italic)
+        tft.setFont(&IosevkaNerdFontMono_BoldItalic8pt8b);
+      else if (attr.bold)
+        tft.setFont(&IosevkaNerdFontMono_Bold8pt8b);
+      else if (attr.italic)
+        tft.setFont(&IosevkaNerdFontMono_Italic8pt8b);
+      else
+        tft.setFont(&IosevkaNerdFontMono_Regular8pt8b);
+      #endif
+      tft.setCursor(px + termCharOffsetX, py + termCharOffsetY);
+      tft.setTextColor(fg, bg);
+      tft.print(printable);
+      #if USE_CUSTOM_FONT
+      tft.setFont(&IosevkaNerdFontMono_Regular8pt8b);  // restore default
+      #endif
+    }
   }
 }
 
@@ -478,16 +685,16 @@ void renderCursor() {
   prevCursorX = cx;
   prevCursorY = cy;
 
-  int px = TERM_OFFSET_X + cx * TERM_CELL_WIDTH;
-  int py = TERM_OFFSET_Y + cy * TERM_CELL_HEIGHT;
+  int px = TERM_OFFSET_X + cx * termCellWidth;
+  int py = TERM_OFFSET_Y + cy * termCellHeight;
 
   if (cursorVisible) {
     // Draw cursor as inverted block
-    char c = vt100.getChar(cx, cy);
+    char c = sanitizeGlyph(vt100.getChar(cx, cy));
     VT100Attr attr = vt100.getAttr(cx, cy);
 
-    uint32_t fg = ansi_colors[attr.fg];
-    uint32_t bg = ansi_colors[attr.bg];
+    uint32_t fg = ansi_colors[clampAnsiIndex(attr.fg)];
+    uint32_t bg = ansi_colors[clampAnsiIndex(attr.bg)];
 
     if (attr.reverse) {
       uint32_t temp = fg;
@@ -495,10 +702,12 @@ void renderCursor() {
       bg = temp;
     }
 
-    tft.fillRect(px, py, TERM_CELL_WIDTH, TERM_CELL_HEIGHT, fg);
-    tft.setCursor(px, py);
+    tft.fillRect(px, py, termCellWidth, termCellHeight, fg);
+    tft.setCursor(px + termCharOffsetX, py + termCharOffsetY);
     tft.setTextColor(bg, fg);
-    tft.print(c);
+    if (c != ' ') {
+      tft.print(c);
+    }
   } else {
     // Restore normal character (cursor invisible)
     renderChar(cx, cy, vt100.getChar(cx, cy));

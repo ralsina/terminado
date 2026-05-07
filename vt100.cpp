@@ -10,22 +10,92 @@
 VT100::VT100() :
     _cursorX(0),
     _cursorY(0),
+    _cols(TERM_DEFAULT_COLS),
+    _rows(TERM_DEFAULT_ROWS),
+    _bufferSize(TERM_DEFAULT_COLS * TERM_DEFAULT_ROWS),
     _savedCursorX(0),
     _savedCursorY(0),
     _state(STATE_GROUND),
     _escapePos(0),
     _needsRedraw(false),
     _flag('\0'),
+    _graphicsMode(false),
+    _utf8Remaining(0),
+    _utf8Codepoint(0),
     _writeCallback(nullptr),
     _titleCallback(nullptr)
 {
     // Initialize screen buffer with spaces
-    memset(_screen, ' ', TERM_BUFFER_SIZE);
+    memset(_screen, ' ', MAX_TERM_BUFFER_SIZE);
 
     // Initialize all attributes
-    for (int i = 0; i < TERM_BUFFER_SIZE; i++) {
+    for (int i = 0; i < MAX_TERM_BUFFER_SIZE; i++) {
         _attrs[i] = VT100Attr();
     }
+}
+
+// Maps Unicode box-drawing codepoints (U+2500..U+257F) to VT100 ACS letters.
+// Zero means no mapping (skip/space).
+static const char boxDrawingACS[128] = {
+ // 2500  2501  2502  2503  2504  2505  2506  2507
+    'q',  'q',  'x',  'x',  'q',  'q',  'x',  'x',
+ // 2508  2509  250A  250B  250C  250D  250E  250F
+    'q',  'q',  'x',  'x',  'l',  'l',  'l',  'l',
+ // 2510  2511  2512  2513  2514  2515  2516  2517
+    'k',  'k',  'k',  'k',  'm',  'm',  'm',  'm',
+ // 2518  2519  251A  251B  251C  251D  251E  251F
+    'j',  'j',  'j',  'j',  't',  't',  't',  't',
+ // 2520  2521  2522  2523  2524  2525  2526  2527
+    't',  't',  't',  't',  'u',  'u',  'u',  'u',
+ // 2528  2529  252A  252B  252C  252D  252E  252F
+    'u',  'u',  'u',  'u',  'w',  'w',  'w',  'w',
+ // 2530  2531  2532  2533  2534  2535  2536  2537
+    'w',  'w',  'w',  'w',  'v',  'v',  'v',  'v',
+ // 2538  2539  253A  253B  253C  253D  253E  253F
+    'v',  'v',  'v',  'v',  'n',  'n',  'n',  'n',
+ // 2540  2541  2542  2543  2544  2545  2546  2547
+    'n',  'n',  'n',  'n',  'n',  'n',  'n',  'n',
+ // 2548  2549  254A  254B  254C  254D  254E  254F
+    'n',  'n',  'n',  'n',  'q',  'q',  'x',  'x',
+ // 2550  2551  2552  2553  2554  2555  2556  2557
+    'q',  'x',  'l',  'l',  'l',  'k',  'k',  'k',
+ // 2558  2559  255A  255B  255C  255D  255E  255F
+    'm',  'm',  'm',  'j',  'j',  'j',  't',  't',
+ // 2560  2561  2562  2563  2564  2565  2566  2567
+    't',  'u',  'u',  'u',  'w',  'w',  'w',  'v',
+ // 2568  2569  256A  256B  256C  256D  256E  256F
+    'v',  'v',  'n',  'n',  'n',  'l',  'k',  'j',
+ // 2570  2571  2572  2573  2574  2575  2576  2577
+    'm',   0,    0,    0,    0,    0,    0,    0,
+ // 2578  2579  257A  257B  257C  257D  257E  257F
+     0,    0,    0,    0,    0,    0,    0,    0,
+};
+
+void VT100::handleCodepoint(uint32_t cp) {
+    if (cp < 0x80) {
+        handleChar((char)cp);
+        return;
+    }
+    // Map Unicode box-drawing to VT100 ACS
+    if (cp >= 0x2500 && cp <= 0x257F) {
+        char acsChar = boxDrawingACS[cp - 0x2500];
+        if (acsChar) {
+            bool savedGraphics = _graphicsMode;
+            _graphicsMode = true;
+            handleChar(acsChar);
+            _graphicsMode = savedGraphics;
+            return;
+        }
+    }
+    // Unknown/unmapped codepoint: advance cursor with a space
+    handleChar(' ');
+}
+
+void VT100::setGeometry(int cols, int rows) {
+    _cols = constrain(cols, 1, MAX_TERM_COLS);
+    _rows = constrain(rows, 1, MAX_TERM_ROWS);
+    _bufferSize = _cols * _rows;
+    clearScreen();
 }
 
 void VT100::process(char c) {
@@ -34,10 +104,31 @@ void VT100::process(char c) {
     switch (_state) {
         case STATE_GROUND:
             if (c == '\033') {
+                _utf8Remaining = 0;
                 _state = STATE_ESCAPE;
                 _escapePos = 0;
                 _escapeBuf[_escapePos++] = c;
+            } else if ((uint8_t)c >= 0xF0) {
+                // 4-byte UTF-8 lead
+                _utf8Codepoint = c & 0x07;
+                _utf8Remaining = 3;
+            } else if ((uint8_t)c >= 0xE0) {
+                // 3-byte UTF-8 lead
+                _utf8Codepoint = c & 0x0F;
+                _utf8Remaining = 2;
+            } else if ((uint8_t)c >= 0xC0) {
+                // 2-byte UTF-8 lead
+                _utf8Codepoint = c & 0x1F;
+                _utf8Remaining = 1;
+            } else if ((uint8_t)c >= 0x80 && _utf8Remaining > 0) {
+                // UTF-8 continuation byte
+                _utf8Codepoint = (_utf8Codepoint << 6) | (c & 0x3F);
+                _utf8Remaining--;
+                if (_utf8Remaining == 0) {
+                    handleCodepoint(_utf8Codepoint);
+                }
             } else {
+                _utf8Remaining = 0;
                 handleChar(c);
             }
             break;
@@ -48,11 +139,24 @@ void VT100::process(char c) {
                 _state = STATE_CSI;
             } else if (c == ']') {
                 _state = STATE_OSC;
+            } else if (c == '(') {
+                _state = STATE_CHARSET;  // ESC ( — wait for charset designator
             } else if (c >= ' ' && c <= '~') {
                 // Simple escape sequence
                 handleEscape(c);
                 _state = STATE_GROUND;
             }
+            break;
+
+        case STATE_CHARSET:
+            // ESC ( 0  → line-drawing graphics mode
+            // ESC ( B  → ASCII normal mode
+            if (c == '0') {
+                _graphicsMode = true;
+            } else {
+                _graphicsMode = false;  // B, A, or anything else = ASCII
+            }
+            _state = STATE_GROUND;
             break;
 
         case STATE_CSI:
@@ -110,10 +214,18 @@ void VT100::handleChar(char c) {
             newline();
             break;
 
+        case '\016':  // SO - Shift Out: switch to G1 (graphics) charset
+            _graphicsMode = true;
+            break;
+
+        case '\017':  // SI - Shift In: switch to G0 (ASCII) charset
+            _graphicsMode = false;
+            break;
+
         case '\t':  // Tab
             _cursorX = (_cursorX + 8) & ~7;
-            if (_cursorX >= TERM_COLS) {
-                _cursorX = TERM_COLS - 1;
+            if (_cursorX >= _cols) {
+                _cursorX = _cols - 1;
             }
             break;
 
@@ -223,14 +335,14 @@ void VT100::executeCSI(const char* seq, int len) {
         case 'B':  // Cursor Down
             {
                 int n = (params[0] > 0) ? params[0] : 1;
-                _cursorY = min(TERM_ROWS - 1, _cursorY + n);
+                _cursorY = min(_rows - 1, _cursorY + n);
             }
             break;
 
         case 'C':  // Cursor Forward
             {
                 int n = (params[0] > 0) ? params[0] : 1;
-                _cursorX = min(TERM_COLS - 1, _cursorX + n);
+                _cursorX = min(_cols - 1, _cursorX + n);
             }
             break;
 
@@ -255,16 +367,16 @@ void VT100::executeCSI(const char* seq, int len) {
                 int mode = (params[0] > 0) ? params[0] : 0;
                 if (mode == 0) {
                     // Erase from cursor to end of screen
-                    for (int y = _cursorY; y < TERM_ROWS; y++) {
+                    for (int y = _cursorY; y < _rows; y++) {
                         int startX = (y == _cursorY) ? _cursorX : 0;
-                        for (int x = startX; x < TERM_COLS; x++) {
+                        for (int x = startX; x < _cols; x++) {
                             setChar(' ', x, y);
                         }
                     }
                 } else if (mode == 1) {
                     // Erase from start of screen to cursor
                     for (int y = 0; y <= _cursorY; y++) {
-                        int endX = (y == _cursorY) ? _cursorX + 1 : TERM_COLS;
+                        int endX = (y == _cursorY) ? _cursorX + 1 : _cols;
                         for (int x = 0; x < endX; x++) {
                             setChar(' ', x, y);
                         }
@@ -281,7 +393,7 @@ void VT100::executeCSI(const char* seq, int len) {
                 int mode = (params[0] > 0) ? params[0] : 0;
                 if (mode == 0) {
                     // Erase from cursor to end of line
-                    for (int x = _cursorX; x < TERM_COLS; x++) {
+                    for (int x = _cursorX; x < _cols; x++) {
                         setChar(' ', x, _cursorY);
                     }
                 } else if (mode == 1) {
@@ -291,7 +403,7 @@ void VT100::executeCSI(const char* seq, int len) {
                     }
                 } else if (mode == 2) {
                     // Erase entire line
-                    for (int x = 0; x < TERM_COLS; x++) {
+                    for (int x = 0; x < _cols; x++) {
                         setChar(' ', x, _cursorY);
                     }
                 }
@@ -309,6 +421,8 @@ void VT100::executeCSI(const char* seq, int len) {
                         _currentAttr = VT100Attr();
                     } else if (code == 1) {
                         _currentAttr.bold = true;
+                    } else if (code == 3) {
+                        _currentAttr.italic = true;
                     } else if (code == 4) {
                         _currentAttr.underline = true;
                     } else if (code == 5 || code == 6) {
@@ -334,7 +448,7 @@ void VT100::executeCSI(const char* seq, int len) {
 
         case '@':  // Insert Characters
             // Shift rest of line to the right
-            for (int x = TERM_COLS - 1; x > _cursorX; x--) {
+            for (int x = _cols - 1; x > _cursorX; x--) {
                 setChar(getChar(x - 1, _cursorY), x, _cursorY);
             }
             setChar(' ', _cursorX, _cursorY);
@@ -342,16 +456,16 @@ void VT100::executeCSI(const char* seq, int len) {
 
         case 'P':  // Delete Characters
             // Shift rest of line to the left
-            for (int x = _cursorX; x < TERM_COLS - 1; x++) {
+            for (int x = _cursorX; x < _cols - 1; x++) {
                 setChar(getChar(x + 1, _cursorY), x, _cursorY);
             }
-            setChar(' ', TERM_COLS - 1, _cursorY);
+            setChar(' ', _cols - 1, _cursorY);
             break;
 
         case 'X':  // Erase Characters
             {
                 int n = (params[0] > 0) ? params[0] : 1;
-                for (int i = 0; i < n && _cursorX + i < TERM_COLS; i++) {
+                for (int i = 0; i < n && _cursorX + i < _cols; i++) {
                     setChar(' ', _cursorX + i, _cursorY);
                 }
             }
@@ -394,17 +508,17 @@ void VT100::executeCSI(const char* seq, int len) {
             // DEBUG: Print to multiple locations to make it visible
             if (params[0] == 18) {
                 // DEBUG: Show we got here by filling row 2 with 'X'
-                for (int i = 0; i < TERM_COLS; i++) {
+                for (int i = 0; i < _cols; i++) {
                     setChar('X', i, 2);
                 }
                 // Report terminal size: try exact format from working terminal
                 if (_writeCallback) {
                     // Try without space: ESC[8;48;88t
                     char response[32];
-                    snprintf(response, sizeof(response), "\033[8;%d;%dt", TERM_ROWS, TERM_COLS);
+                    snprintf(response, sizeof(response), "\033[8;%d;%dt", _rows, _cols);
                     _writeCallback(response, strlen(response));
                     // DEBUG: Fill row 3 with 'Y' to show we sent it
-                    for (int i = 0; i < TERM_COLS; i++) {
+                    for (int i = 0; i < _cols; i++) {
                         setChar('Y', i, 3);
                     }
                 }
@@ -429,13 +543,13 @@ void VT100::executeCSI(const char* seq, int len) {
 }
 
 void VT100::setCursor(int x, int y) {
-    _cursorX = constrain(x, 0, TERM_COLS - 1);
-    _cursorY = constrain(y, 0, TERM_ROWS - 1);
+    _cursorX = constrain(x, 0, _cols - 1);
+    _cursorY = constrain(y, 0, _rows - 1);
 }
 
 void VT100::advanceCursor() {
     _cursorX++;
-    if (_cursorX >= TERM_COLS) {
+    if (_cursorX >= _cols) {
         _cursorX = 0;
         newline();
     }
@@ -443,45 +557,46 @@ void VT100::advanceCursor() {
 
 void VT100::newline() {
     _cursorY++;
-    if (_cursorY >= TERM_ROWS) {
-        _cursorY = TERM_ROWS - 1;
+    if (_cursorY >= _rows) {
+        _cursorY = _rows - 1;
         scrollUp();
     }
 }
 
 void VT100::scrollUp() {
     // Move all lines up by one
-    memmove(_screen, _screen + TERM_COLS, (TERM_ROWS - 1) * TERM_COLS);
-    memmove(_attrs, _attrs + TERM_COLS, (TERM_ROWS - 1) * TERM_COLS * sizeof(VT100Attr));
+    memmove(_screen, _screen + _cols, (_rows - 1) * _cols);
+    memmove(_attrs, _attrs + _cols, (_rows - 1) * _cols * sizeof(VT100Attr));
 
     // Clear bottom line
-    for (int x = 0; x < TERM_COLS; x++) {
-        setChar(' ', x, TERM_ROWS - 1);
+    for (int x = 0; x < _cols; x++) {
+        setChar(' ', x, _rows - 1);
     }
 }
 
 void VT100::scrollDown() {
     // Move all lines down by one
-    memmove(_screen + TERM_COLS, _screen, (TERM_ROWS - 1) * TERM_COLS);
-    memmove(_attrs + TERM_COLS, _attrs, (TERM_ROWS - 1) * TERM_COLS * sizeof(VT100Attr));
+    memmove(_screen + _cols, _screen, (_rows - 1) * _cols);
+    memmove(_attrs + _cols, _attrs, (_rows - 1) * _cols * sizeof(VT100Attr));
 
     // Clear top line
-    for (int x = 0; x < TERM_COLS; x++) {
+    for (int x = 0; x < _cols; x++) {
         setChar(' ', x, 0);
     }
 }
 
 void VT100::setChar(char c, int x, int y) {
     int idx = xyToIndex(x, y);
-    if (idx >= 0 && idx < TERM_BUFFER_SIZE) {
+    if (idx >= 0 && idx < _bufferSize) {
         _screen[idx] = c;
         _attrs[idx] = _currentAttr;
+        _attrs[idx].graphics = _graphicsMode;
     }
 }
 
 char VT100::getChar(int x, int y) const {
     int idx = xyToIndex(x, y);
-    if (idx >= 0 && idx < TERM_BUFFER_SIZE) {
+    if (idx >= 0 && idx < _bufferSize) {
         return _screen[idx];
     }
     return ' ';
@@ -489,15 +604,15 @@ char VT100::getChar(int x, int y) const {
 
 VT100Attr VT100::getAttr(int x, int y) const {
     int idx = xyToIndex(x, y);
-    if (idx >= 0 && idx < TERM_BUFFER_SIZE) {
+    if (idx >= 0 && idx < _bufferSize) {
         return _attrs[idx];
     }
     return VT100Attr();
 }
 
 void VT100::clearScreen() {
-    memset(_screen, ' ', TERM_BUFFER_SIZE);
-    for (int i = 0; i < TERM_BUFFER_SIZE; i++) {
+    memset(_screen, ' ', _bufferSize);
+    for (int i = 0; i < _bufferSize; i++) {
         _attrs[i] = _currentAttr; // Preserve current attributes including background color
     }
     setCursor(0, 0);

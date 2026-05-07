@@ -7,24 +7,7 @@
 #define VT100_H
 
 #include <Arduino.h>
-
-// Screen dimensions (must match terminado.ino)
-#define SCREEN_WIDTH 800
-#define SCREEN_HEIGHT 480
-
-// Font multiplier (must match terminado.ino)
-#define FONT_MULTIPLIER 1
-
-// Calculate cell size from font multiplier (Font0 base is 8x8 pixels)
-#define TERM_CELL_WIDTH (8 * FONT_MULTIPLIER + 1)  // +1 for spacing
-#define TERM_CELL_HEIGHT (8 * FONT_MULTIPLIER + 2) // +2 for line spacing
-
-// Calculate terminal size based on screen and cell size
-// Reserve one row at bottom for status bar
-#define TERM_COLS (SCREEN_WIDTH / TERM_CELL_WIDTH)
-#define TERM_ROWS ((SCREEN_HEIGHT / TERM_CELL_HEIGHT) - 1)  // One row for status bar
-#define TERM_BUFFER_SIZE (TERM_COLS * TERM_ROWS)
-#define STATUS_ROW (TERM_ROWS)  // The row below the terminal
+#include "term_config.h"
 
 // VT100 colors
 enum VT100Color {
@@ -42,13 +25,15 @@ enum VT100Color {
 struct VT100Attr {
     bool bold;
     bool underline;
+    bool italic;
     bool reverse;
     bool blink;
+    bool graphics;  // true = VT100 line-drawing charset (ESC ( 0)
     VT100Color fg;
     VT100Color bg;
 
-    VT100Attr() : bold(false), underline(false), reverse(false), blink(false),
-                  fg(VT100_COLOR_WHITE), bg(VT100_COLOR_BLACK) {}
+    VT100Attr() : bold(false), underline(false), italic(false), reverse(false), blink(false),
+                  graphics(false), fg(VT100_COLOR_WHITE), bg(VT100_COLOR_BLACK) {}
 };
 
 // Terminal state
@@ -86,14 +71,22 @@ public:
     // Clear screen
     void clearScreen();
 
+    // Update terminal geometry at runtime (derived from active font metrics).
+    void setGeometry(int cols, int rows);
+
     // Get terminal size
-    int cols() const { return TERM_COLS; }
-    int rows() const { return TERM_ROWS; }
+    int cols() const { return _cols; }
+    int rows() const { return _rows; }
 
 private:
     // Screen buffer
-    char _screen[TERM_BUFFER_SIZE];
-    VT100Attr _attrs[TERM_BUFFER_SIZE];
+    char _screen[MAX_TERM_BUFFER_SIZE];
+    VT100Attr _attrs[MAX_TERM_BUFFER_SIZE];
+
+    // Active geometry
+    int _cols;
+    int _rows;
+    int _bufferSize;
 
     // Cursor position
     int _cursorX;
@@ -108,7 +101,8 @@ private:
         STATE_GROUND,
         STATE_ESCAPE,
         STATE_CSI,
-        STATE_OSC
+        STATE_OSC,
+        STATE_CHARSET
     } _state;
 
     char _escapeBuf[32];  // Buffer for escape sequences
@@ -117,6 +111,13 @@ private:
 
     // Current attributes
     VT100Attr _currentAttr;
+
+    // Current charset: false = ASCII (G0), true = graphics (G1 line drawing)
+    bool _graphicsMode;
+
+    // UTF-8 decoder state
+    int _utf8Remaining;       // continuation bytes still expected
+    uint32_t _utf8Codepoint;  // codepoint being assembled
 
     // Redraw flag
     bool _needsRedraw;
@@ -129,6 +130,7 @@ private:
 
     // Internal methods
     void handleChar(char c);
+    void handleCodepoint(uint32_t cp);
     void handleEscape(char c);
     void handleCSI(char c);
     void executeCSI(const char* seq, int len);
@@ -140,7 +142,7 @@ private:
     void scrollDown();
 
     void setChar(char c, int x, int y);
-    int xyToIndex(int x, int y) const { return y * TERM_COLS + x; }
+    int xyToIndex(int x, int y) const { return y * _cols + x; }
 };
 
 #endif // VT100_H
