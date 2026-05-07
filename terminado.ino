@@ -142,9 +142,13 @@ void loop()
 void handleKeyPress(const BBQ10Keyboard::KeyEvent &key) {
   char c = key.key;
 
-  // Special key mappings for arrow keys
-  // 6 = left, 17 = down, 7 = up, 18 = right
+  // Special key mappings for BBQ20 keyboard
+  // 5 = escape, 6 = left, 17 = down, 7 = up, 18 = right
   switch (c) {
+    case 5:    // Escape key
+      Serial.write('\e');
+      return;
+
     case 7:   // Up arrow
       Serial.write("\033[A");
       return;
@@ -171,10 +175,6 @@ void handleKeyPress(const BBQ10Keyboard::KeyEvent &key) {
 
     case '\t':  // Tab
       Serial.write('\t');
-      break;
-
-    case 27:   // Escape
-      Serial.write('\e');
       break;
 
     default:
