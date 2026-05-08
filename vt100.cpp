@@ -359,14 +359,16 @@ void VT100::executeCSI(const char* seq, int len) {
         case 'A':  // Cursor Up
             {
                 int n = (params[0] > 0) ? params[0] : 1;
-                _cursorY = max(0, _cursorY - n);
+                int topLimit = _originMode ? _scrollTop : 0;
+                _cursorY = max(topLimit, _cursorY - n);
             }
             break;
 
         case 'B':  // Cursor Down
             {
                 int n = (params[0] > 0) ? params[0] : 1;
-                _cursorY = min(_rows - 1, _cursorY + n);
+                int bottomLimit = _originMode ? _scrollBottom : _rows - 1;
+                _cursorY = min(bottomLimit, _cursorY + n);
             }
             break;
 
@@ -486,27 +488,71 @@ void VT100::executeCSI(const char* seq, int len) {
             break;
 
         case 'L':  // Insert Lines
-            scrollDown();
+            {
+                int n = (params[0] > 0) ? params[0] : 1;
+                if (_cursorY >= _scrollTop && _cursorY <= _scrollBottom) {
+                    int moveLines = _scrollBottom - _cursorY - n + 1;
+                    if (moveLines > 0) {
+                        memmove(&_screen[(_cursorY + n) * _cols], &_screen[_cursorY * _cols], moveLines * _cols);
+                        memmove(&_attrs[(_cursorY + n) * _cols], &_attrs[_cursorY * _cols], moveLines * _cols * sizeof(VT100Attr));
+                    }
+                    int clearLines = min(n, _scrollBottom - _cursorY + 1);
+                    for (int row = _cursorY; row < _cursorY + clearLines; row++) {
+                        for (int col = 0; col < _cols; col++) {
+                            setChar(' ', col, row);
+                        }
+                    }
+                }
+            }
             break;
 
         case 'M':  // Delete Lines
-            scrollUp();
+            {
+                int n = (params[0] > 0) ? params[0] : 1;
+                if (_cursorY >= _scrollTop && _cursorY <= _scrollBottom) {
+                    int moveLines = _scrollBottom - _cursorY - n + 1;
+                    if (moveLines > 0) {
+                        memmove(&_screen[_cursorY * _cols], &_screen[(_cursorY + n) * _cols], moveLines * _cols);
+                        memmove(&_attrs[_cursorY * _cols], &_attrs[(_cursorY + n) * _cols], moveLines * _cols * sizeof(VT100Attr));
+                    }
+                    int clearStart = max(_cursorY, _scrollBottom - n + 1);
+                    for (int row = clearStart; row <= _scrollBottom; row++) {
+                        for (int col = 0; col < _cols; col++) {
+                            setChar(' ', col, row);
+                        }
+                    }
+                }
+            }
             break;
 
         case '@':  // Insert Characters
-            // Shift rest of line to the right
-            for (int x = _cols - 1; x > _cursorX; x--) {
-                setChar(getChar(x - 1, _cursorY), x, _cursorY);
+            {
+                int n = min((params[0] > 0) ? params[0] : 1, _cols - _cursorX);
+                for (int x = _cols - 1; x >= _cursorX + n; x--) {
+                    int src = xyToIndex(x - n, _cursorY);
+                    int dst = xyToIndex(x, _cursorY);
+                    _screen[dst] = _screen[src];
+                    _attrs[dst] = _attrs[src];
+                }
+                for (int x = _cursorX; x < _cursorX + n; x++) {
+                    setChar(' ', x, _cursorY);
+                }
             }
-            setChar(' ', _cursorX, _cursorY);
             break;
 
         case 'P':  // Delete Characters
-            // Shift rest of line to the left
-            for (int x = _cursorX; x < _cols - 1; x++) {
-                setChar(getChar(x + 1, _cursorY), x, _cursorY);
+            {
+                int n = min((params[0] > 0) ? params[0] : 1, _cols - _cursorX);
+                for (int x = _cursorX; x < _cols - n; x++) {
+                    int src = xyToIndex(x + n, _cursorY);
+                    int dst = xyToIndex(x, _cursorY);
+                    _screen[dst] = _screen[src];
+                    _attrs[dst] = _attrs[src];
+                }
+                for (int x = _cols - n; x < _cols; x++) {
+                    setChar(' ', x, _cursorY);
+                }
             }
-            setChar(' ', _cols - 1, _cursorY);
             break;
 
         case 'X':  // Erase Characters
@@ -656,10 +702,12 @@ void VT100::advanceCursor() {
 }
 
 void VT100::newline() {
-    _cursorY++;
-    if (_cursorY > _scrollBottom) {
-        _cursorY = _scrollBottom;
+    if (_cursorY == _scrollBottom) {
+        // At the bottom scroll margin: scroll the region, cursor stays
         scrollUp();
+    } else {
+        // Anywhere else: just move down, clamped to screen bottom
+        _cursorY = min(_cursorY + 1, _rows - 1);
     }
 }
 
@@ -668,7 +716,7 @@ void VT100::scrollUp() {
     if (_scrollTop < _scrollBottom) {
         // Move lines up within the scrolling region
         int lines = _scrollBottom - _scrollTop;
-        memmove(&_screen[_scrollTop * _cols], &_screen[(_scrollTop + 1) * _cols], lines * _cols * sizeof(uint16_t));
+        memmove(&_screen[_scrollTop * _cols], &_screen[(_scrollTop + 1) * _cols], lines * _cols);
         memmove(&_attrs[_scrollTop * _cols], &_attrs[(_scrollTop + 1) * _cols], lines * _cols * sizeof(VT100Attr));
         
         // Clear the bottom line of the scrolling region
@@ -683,7 +731,7 @@ void VT100::scrollDown() {
     if (_scrollTop < _scrollBottom) {
         // Move lines down within the scrolling region
         int lines = _scrollBottom - _scrollTop;
-        memmove(&_screen[(_scrollTop + 1) * _cols], &_screen[_scrollTop * _cols], lines * _cols * sizeof(uint16_t));
+        memmove(&_screen[(_scrollTop + 1) * _cols], &_screen[_scrollTop * _cols], lines * _cols);
         memmove(&_attrs[(_scrollTop + 1) * _cols], &_attrs[_scrollTop * _cols], lines * _cols * sizeof(VT100Attr));
         
         // Clear the top line of the scrolling region
@@ -694,7 +742,6 @@ void VT100::scrollDown() {
 }
 
 void VT100::setChar(char c, int x, int y) {
-    applyOriginMode(x, y);
     int idx = xyToIndex(x, y);
     if (idx >= 0 && idx < _bufferSize) {
         _screen[idx] = c;
