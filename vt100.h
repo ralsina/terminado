@@ -87,6 +87,9 @@ public:
     // Get line feed mode (LNM): true = Enter sends CR LF, false = CR only
     bool lineFeedMode() const { return _lineFeedMode; }
 
+    // Get screen reverse mode (DECSCNM): true = light background
+    bool screenReverse() const { return _screenReverse; }
+
 private:
     // Screen buffer
     char _screen[MAX_TERM_BUFFER_SIZE];
@@ -120,6 +123,9 @@ private:
 
     // Auto Wrap Mode (DECAWM): if set, cursor wraps at end of line
     bool _autoWrap;
+
+    // Screen Reverse Mode (DECSCNM): if set, entire screen is reversed (light background)
+    bool _screenReverse;
 
     // Tab stops (one bool per column)
     bool _tabStops[MAX_TERM_COLS];

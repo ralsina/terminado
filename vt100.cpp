@@ -25,6 +25,7 @@
         _originMode(false),
         _lineFeedMode(false),
         _autoWrap(true),
+        _screenReverse(false),
         _tabStops{},
         _state(STATE_GROUND),
         _escapePos(0),
@@ -605,7 +606,10 @@ void VT100::executeCSI(const char* seq, int len) {
                 // DEC Private Mode Set/Reset (ESC [ ? Pn h/l)
                 if (paramCount > 0) {
                     for (int i = 0; i < paramCount; i++) {
-                        if (params[i] == 6) {
+                        if (params[i] == 5) {
+                            // DECSCNM - Screen Normal/Reverse Mode
+                            _screenReverse = (command == 'h');
+                        } else if (params[i] == 6) {
                             // DECOM - Origin Mode
                             _originMode = (command == 'h');
                             // Cursor moves to home on mode change (spec requirement)

@@ -511,11 +511,19 @@ void renderTerminal() {
   static char lastScreen[MAX_TERM_BUFFER_SIZE];
   static VT100Attr lastAttrs[MAX_TERM_BUFFER_SIZE];
   static bool initialized = false;
+  static bool lastScreenReverse = false;
 
   if (!initialized) {
     memset(lastScreen, 0, sizeof(lastScreen));
     memset(lastAttrs, 0, sizeof(lastAttrs));
     initialized = true;
+  }
+
+  // If screen reverse mode changed, force full repaint by invalidating cache
+  if (vt100.screenReverse() != lastScreenReverse) {
+    lastScreenReverse = vt100.screenReverse();
+    memset(lastScreen, 0, sizeof(lastScreen));
+    memset(lastAttrs, 0, sizeof(lastAttrs));
   }
 
   // Clear previous cursor position before rendering
@@ -633,8 +641,9 @@ void renderChar(int x, int y, char c) {
   uint32_t fg = ansi_colors[clampAnsiIndex(attr.fg)];
   uint32_t bg = ansi_colors[clampAnsiIndex(attr.bg)];
 
-  // Handle reverse video
-  if (attr.reverse) {
+  // Handle reverse video (per-character XOR screen-wide reverse)
+  bool effectiveReverse = attr.reverse ^ vt100.screenReverse();
+  if (effectiveReverse) {
     uint32_t temp = fg;
     fg = bg;
     bg = temp;
