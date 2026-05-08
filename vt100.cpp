@@ -178,13 +178,28 @@ void VT100::process(char c) {
             break;
 
         case STATE_CSI:
-            _escapeBuf[_escapePos++] = c;
-            if (_escapePos >= 31) {  // Prevent buffer overflow
+            // C0 controls (except ESC, CAN, SUB) are executed immediately
+            // without interrupting the CSI sequence
+            if (c == '\030' || c == '\032') {
+                // CAN (0x18) or SUB (0x1A): cancel sequence
                 _state = STATE_GROUND;
-            } else if (c >= '@' && c <= '~') {
-                // End of CSI sequence
-                executeCSI(_escapeBuf, _escapePos);
-                _state = STATE_GROUND;
+            } else if (c == '\033') {
+                // ESC cancels current sequence and starts a new one
+                _state = STATE_ESCAPE;
+                _escapePos = 0;
+                _escapeBuf[_escapePos++] = c;
+            } else if (c < 0x20) {
+                // Other C0 controls: execute immediately, sequence continues
+                handleChar(c);
+            } else {
+                _escapeBuf[_escapePos++] = c;
+                if (_escapePos >= 31) {  // Prevent buffer overflow
+                    _state = STATE_GROUND;
+                } else if (c >= '@' && c <= '~') {
+                    // End of CSI sequence
+                    executeCSI(_escapeBuf, _escapePos);
+                    _state = STATE_GROUND;
+                }
             }
             break;
 
