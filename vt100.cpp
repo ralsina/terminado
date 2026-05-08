@@ -18,6 +18,8 @@
         _bufferSize(TERM_DEFAULT_COLS * TERM_DEFAULT_ROWS),
         _savedCursorX(0),
         _savedCursorY(0),
+        _savedGraphicsMode(false),
+        _savedOriginMode(false),
         _scrollTop(0),
         _scrollBottom(_rows - 1),
         _originMode(false),
@@ -151,8 +153,8 @@ void VT100::process(char c) {
                 _state = STATE_CSI;
             } else if (c == ']') {
                 _state = STATE_OSC;
-            } else if (c == '(') {
-                _state = STATE_CHARSET;  // ESC ( — wait for charset designator
+            } else if (c == '(' || c == ')') {
+                _state = STATE_CHARSET;  // ESC ( or ESC ) — wait for charset designator
             } else if (c >= ' ' && c <= '~') {
                 // Simple escape sequence
                 handleEscape(c);
@@ -291,14 +293,20 @@ void VT100::handleEscape(char c) {
             newline();
             break;
 
-        case '7':  // Save Cursor
+        case '7':  // Save Cursor (DECSC)
             _savedCursorX = _cursorX;
             _savedCursorY = _cursorY;
+            _savedAttr = _currentAttr;
+            _savedGraphicsMode = _graphicsMode;
+            _savedOriginMode = _originMode;
             break;
 
-        case '8':  // Restore Cursor
+        case '8':  // Restore Cursor (DECRC)
             _cursorX = _savedCursorX;
             _cursorY = _savedCursorY;
+            _currentAttr = _savedAttr;
+            _graphicsMode = _savedGraphicsMode;
+            _originMode = _savedOriginMode;
             break;
 
         case 'c':  // Reset Device
@@ -623,6 +631,22 @@ void VT100::executeCSI(const char* seq, int len) {
                     }
                 }
             }
+            break;
+
+        case 's':  // Save Cursor (ANSI SCP)
+            _savedCursorX = _cursorX;
+            _savedCursorY = _cursorY;
+            _savedAttr = _currentAttr;
+            _savedGraphicsMode = _graphicsMode;
+            _savedOriginMode = _originMode;
+            break;
+
+        case 'u':  // Restore Cursor (ANSI RCP)
+            _cursorX = _savedCursorX;
+            _cursorY = _savedCursorY;
+            _currentAttr = _savedAttr;
+            _graphicsMode = _savedGraphicsMode;
+            _originMode = _savedOriginMode;
             break;
 
         case 'g':  // TBC - Tab Clear

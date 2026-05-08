@@ -104,6 +104,9 @@ private:
     // Saved cursor position
     int _savedCursorX;
     int _savedCursorY;
+    VT100Attr _savedAttr;
+    bool _savedGraphicsMode;
+    bool _savedOriginMode;
     
     // Scroll region (inclusive, 0-based)
     int _scrollTop;
