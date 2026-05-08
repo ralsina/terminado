@@ -15,6 +15,7 @@ Description	:	VT100 terminal emulator with BBQ20 keyboard and serial communicati
 #include "iosevka_bold.h"
 #include "iosevka_italic.h"
 #include "iosevka_bolditalic.h"
+#include "config_menu.h"
 
 BBQ10Keyboard keyboard;
 VT100 vt100;
@@ -25,7 +26,6 @@ bool ctrlKeyPressed = false;
 
 // Status bar state
 String terminalTitle = "VT100 Terminal";
-const int serialBaud = 19200;
 String debugMessage = "";
 unsigned long debugMessageTime = 0;
 const unsigned long DEBUG_MESSAGE_DURATION = 3000; // Show debug for 3 seconds
@@ -219,7 +219,7 @@ void renderStatusBar() {
   if (millis() - debugMessageTime < DEBUG_MESSAGE_DURATION && debugMessage.length() > 0) {
     currentContent = "DEBUG: " + debugMessage;
   } else {
-    currentContent = terminalTitle + " | " + String(serialBaud) + " baud";
+    currentContent = terminalTitle + " | " + String(configMenuGetBaud()) + " baud";
   }
 
   // Only redraw if content changed
@@ -240,7 +240,7 @@ void renderStatusBar() {
 
 void setup()
 {
-  Serial.begin(serialBaud); // Middle ground baud rate
+  Serial.begin(configMenuGetBaud()); // Baud from config
 
   // Explicitly initialize modifier states
   fnKeyPressed = false;
@@ -305,8 +305,10 @@ void loop()
       char c = Serial.read();
       vt100.process(c);
     }
-    // Only render once per batch of data
-    renderTerminal();
+    // Only render once per batch of data, and only if menu not covering screen
+    if (!configMenuIsActive()) {
+      renderTerminal();
+    }
   }
 
   // Handle keyboard input (from terminal to host)
@@ -317,7 +319,7 @@ void loop()
   }
 
   // Handle cursor blinking (respect DECTCEM cursor visibility)
-  if (millis() - lastCursorBlink > CURSOR_BLINK_INTERVAL) {
+  if (!configMenuIsActive() && millis() - lastCursorBlink > CURSOR_BLINK_INTERVAL) {
     cursorVisible = vt100.cursorVisible() ? !cursorVisible : false;
     lastCursorBlink = millis();
     renderCursor();
@@ -334,8 +336,10 @@ void loop()
     }
   }
 
-  // Update status bar
-  renderStatusBar();
+  // Update status bar (not while menu is open)
+  if (!configMenuIsActive()) {
+    renderStatusBar();
+  }
 }
 
 void handleKeyPress(const BBQ10Keyboard::KeyEvent &key) {
@@ -403,10 +407,27 @@ void handleKeyPress(const BBQ10Keyboard::KeyEvent &key) {
 // Helper function to process character input
 void processKeyCharacter(char c) {
 
+  // If config menu is active, route all keys to it
+  if (configMenuIsActive()) {
+    if (configMenuHandleKey(c, fnKeyPressed)) {
+      if (!configMenuIsActive()) {
+        // Menu just closed — force full terminal redraw
+        tft.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, TFT_BLACK);
+        renderTerminal();
+        renderStatusBar();
+      }
+      return;
+    }
+  }
+
   // Special key mappings for BBQ20 keyboard
   // 5 = escape, 6 = left, 17 = down, 18 = control, 7 = Fn
   switch (c) {
-    case 5:    // Escape key
+    case 5:    // Escape key — Fn+ESC opens config menu
+      if (fnKeyPressed) {
+        configMenuOpen();
+        return;
+      }
       Serial.write('\e');
       return;
 
