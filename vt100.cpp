@@ -551,7 +551,12 @@ void VT100::executeCSI(const char* seq, int len) {
                 // DEC Private Mode Set/Reset (ESC [ ? Pn h/l)
                 if (paramCount > 0) {
                     for (int i = 0; i < paramCount; i++) {
-                        if (params[i] == 7) {
+                        if (params[i] == 6) {
+                            // DECOM - Origin Mode
+                            _originMode = (command == 'h');
+                            // Cursor moves to home on mode change (spec requirement)
+                            setCursor(0, 0);
+                        } else if (params[i] == 7) {
                             // DECAWM - Auto Wrap Mode
                             _autoWrap = (command == 'h');
                         }
