@@ -6,6 +6,9 @@
 #include "vt100.h"
 #include <string.h>
 #include <stdio.h>
+#include <cstddef>
+#include <cstdint>
+#include <algorithm>
 
     VT100::VT100() :
         _cursorX(0),
@@ -18,6 +21,7 @@
         _scrollTop(0),
         _scrollBottom(_rows - 1),
         _originMode(false),
+        _lineFeedMode(false),
         _state(STATE_GROUND),
         _escapePos(0),
         _needsRedraw(false),
@@ -211,6 +215,9 @@ void VT100::handleChar(char c) {
     switch (c) {
         case '\r':  // Carriage Return
             _cursorX = 0;
+            if (_lineFeedMode) {
+                newline();
+            }
             break;
 
         case '\n':  // Line Feed
@@ -502,6 +509,28 @@ void VT100::executeCSI(const char* seq, int len) {
                     // Respond with basic VT100 identification
                     const char* response = "\033[?6c";  // Indicates VT100, no microprocessor, no printer
                     _writeCallback(response, strlen(response));
+                }
+            }
+            break;
+            
+        case 'h':  // Set Mode (SM)
+        case 'l':  // Reset Mode (RM)
+            if (_flag == '?') {
+                // DEC Private Mode Set/Reset (ESC [ ? Pn h/l)
+                // (no DEC private modes currently handled here)
+            } else {
+                // ANSI Mode Set/Reset (ESC [ Pn h/l)
+                if (paramCount > 0) {
+                    for (int i = 0; i < paramCount; i++) {
+                        if (params[i] == 20) {
+                            // LNM - Line Feed/New Line Mode
+                            if (command == 'h') {
+                                _lineFeedMode = true;  // Enter sends CR LF
+                            } else {
+                                _lineFeedMode = false; // Enter sends CR only
+                            }
+                        }
+                    }
                 }
             }
             break;

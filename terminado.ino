@@ -467,7 +467,11 @@ void processKeyCharacter(char c) {
       break;
 
     case '\n':  // Enter key
-      Serial.write('\r');  // Just send CR, let terminal handle newline
+      if (vt100.lineFeedMode()) {
+        Serial.write("\r\n");  // Send CR LF when newline mode is set
+      } else {
+        Serial.write('\r');  // Send CR only
+      }
       break;
 
     case '\b':  // Backspace

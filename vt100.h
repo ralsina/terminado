@@ -7,6 +7,8 @@
 #define VT100_H
 
 #include <Arduino.h>
+#include <cstddef>
+#include <cstdint>
 #include "term_config.h"
 
 // VT100 colors
@@ -82,6 +84,9 @@ public:
     int cols() const { return _cols; }
     int rows() const { return _rows; }
 
+    // Get line feed mode (LNM): true = Enter sends CR LF, false = CR only
+    bool lineFeedMode() const { return _lineFeedMode; }
+
 private:
     // Screen buffer
     char _screen[MAX_TERM_BUFFER_SIZE];
@@ -106,6 +111,9 @@ private:
     
     // Origin mode (DECOM): if set, cursor coordinates are relative to scrolling region
     bool _originMode;
+    
+    // Line Feed/New Line Mode (LNM): if set, Enter sends CR LF, else CR only
+    bool _lineFeedMode;
 
     // Escape sequence parsing
     enum State {
