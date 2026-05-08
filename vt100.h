@@ -90,6 +90,12 @@ public:
     // Get screen reverse mode (DECSCNM): true = light background
     bool screenReverse() const { return _screenReverse; }
 
+    // Get application cursor keys mode (DECCKM): true = sends ESC O x instead of ESC [ x
+    bool appCursorKeys() const { return _appCursorKeys; }
+
+    // Get cursor visibility (DECTCEM): true = cursor visible
+    bool cursorVisible() const { return _cursorVisible; }
+
 private:
     // Screen buffer
     char _screen[MAX_TERM_BUFFER_SIZE];
@@ -126,6 +132,15 @@ private:
 
     // Screen Reverse Mode (DECSCNM): if set, entire screen is reversed (light background)
     bool _screenReverse;
+
+    // Application Cursor Keys Mode (DECCKM)
+    bool _appCursorKeys;
+
+    // Cursor Visibility (DECTCEM)
+    bool _cursorVisible;
+
+    // Insert Mode (IRM): if set, characters push existing ones right
+    bool _insertMode;
 
     // Tab stops (one bool per column)
     bool _tabStops[MAX_TERM_COLS];

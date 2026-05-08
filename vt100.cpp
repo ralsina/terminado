@@ -26,6 +26,9 @@
         _lineFeedMode(false),
         _autoWrap(true),
         _screenReverse(false),
+        _appCursorKeys(false),
+        _cursorVisible(true),
+        _insertMode(false),
         _tabStops{},
         _state(STATE_GROUND),
         _escapePos(0),
@@ -262,6 +265,15 @@ void VT100::handleChar(char c) {
         default:
             // Regular character
             if (c >= 32 && c <= 126) {
+                if (_insertMode) {
+                    // Shift line right by one before inserting
+                    for (int x = _cols - 1; x > _cursorX; x--) {
+                        int src = xyToIndex(x - 1, _cursorY);
+                        int dst = xyToIndex(x, _cursorY);
+                        _screen[dst] = _screen[src];
+                        _attrs[dst] = _attrs[src];
+                    }
+                }
                 setChar(c, _cursorX, _cursorY);
                 advanceCursor();
             }
@@ -278,7 +290,7 @@ void VT100::initTabStops() {
 void VT100::handleEscape(char c) {
     switch (c) {
         case 'M':  // Reverse Index (move up, scroll if needed)
-            if (_cursorY > 0) {
+            if (_cursorY > _scrollTop) {
                 _cursorY--;
             } else {
                 scrollDown();
@@ -310,7 +322,23 @@ void VT100::handleEscape(char c) {
             _originMode = _savedOriginMode;
             break;
 
-        case 'c':  // Reset Device
+        case 'c':  // Reset Device (RIS - full reset)
+            _originMode = false;
+            _lineFeedMode = false;
+            _autoWrap = true;
+            _screenReverse = false;
+            _appCursorKeys = false;
+            _cursorVisible = true;
+            _insertMode = false;
+            _graphicsMode = false;
+            _scrollTop = 0;
+            _scrollBottom = _rows - 1;
+            _currentAttr = VT100Attr();
+            _savedCursorX = 0;
+            _savedCursorY = 0;
+            _savedAttr = VT100Attr();
+            _savedGraphicsMode = false;
+            _savedOriginMode = false;
             clearScreen();
             initTabStops();
             break;
@@ -344,9 +372,12 @@ void VT100::executeCSI(const char* seq, int len) {
     const char* end = seq + len;
     char command = end[-1];  // Last character is the command
 
-    // Check for flag character (like '?')
+    // Check for flag character (like '?' or '>')
     if (*p == '?') {
         _flag = '?';
+        p++;
+    } else if (*p == '>') {
+        _flag = '>';
         p++;
     }
 
@@ -392,6 +423,60 @@ void VT100::executeCSI(const char* seq, int len) {
             {
                 int n = (params[0] > 0) ? params[0] : 1;
                 _cursorX = max(0, _cursorX - n);
+            }
+            break;
+
+        case 'E':  // Cursor Next Line
+            {
+                int n = (params[0] > 0) ? params[0] : 1;
+                int bottomLimit = _originMode ? _scrollBottom : _rows - 1;
+                _cursorY = min(bottomLimit, _cursorY + n);
+                _cursorX = 0;
+            }
+            break;
+
+        case 'F':  // Cursor Preceding Line
+            {
+                int n = (params[0] > 0) ? params[0] : 1;
+                int topLimit = _originMode ? _scrollTop : 0;
+                _cursorY = max(topLimit, _cursorY - n);
+                _cursorX = 0;
+            }
+            break;
+
+        case 'G':  // Cursor Horizontal Absolute
+            {
+                int col = (params[0] > 0) ? params[0] : 1;
+                _cursorX = constrain(col - 1, 0, _cols - 1);
+            }
+            break;
+
+        case 'd':  // Cursor Vertical Absolute (Line Position Absolute)
+            {
+                int row = (params[0] > 0) ? params[0] : 1;
+                _cursorY = constrain(row - 1, 0, _rows - 1);
+            }
+            break;
+
+        case 'I':  // CHT - Cursor Forward Tab
+            {
+                int n = (params[0] > 0) ? params[0] : 1;
+                for (int t = 0; t < n; t++) {
+                    int next = _cursorX + 1;
+                    while (next < _cols && !_tabStops[next]) next++;
+                    _cursorX = (next < _cols) ? next : _cols - 1;
+                }
+            }
+            break;
+
+        case 'Z':  // CBT - Cursor Backward Tab
+            {
+                int n = (params[0] > 0) ? params[0] : 1;
+                for (int t = 0; t < n; t++) {
+                    int prev = _cursorX - 1;
+                    while (prev > 0 && !_tabStops[prev]) prev--;
+                    _cursorX = (prev >= 0) ? prev : 0;
+                }
             }
             break;
 
@@ -479,6 +564,8 @@ void VT100::executeCSI(const char* seq, int len) {
                         _currentAttr = VT100Attr();
                     } else if (code == 1) {
                         _currentAttr.bold = true;
+                    } else if (code == 2) {
+                        _currentAttr.bold = false;  // faint/dim treated as bold-off
                     } else if (code == 3) {
                         _currentAttr.italic = true;
                     } else if (code == 4) {
@@ -487,6 +574,16 @@ void VT100::executeCSI(const char* seq, int len) {
                         _currentAttr.blink = true;
                     } else if (code == 7) {
                         _currentAttr.reverse = true;
+                    } else if (code == 22) {
+                        _currentAttr.bold = false;
+                    } else if (code == 23) {
+                        _currentAttr.italic = false;
+                    } else if (code == 24) {
+                        _currentAttr.underline = false;
+                    } else if (code == 25) {
+                        _currentAttr.blink = false;
+                    } else if (code == 27) {
+                        _currentAttr.reverse = false;
                     } else if (code >= 30 && code <= 37) {
                         _currentAttr.fg = (VT100Color)(code - 30);
                     } else if (code >= 40 && code <= 47) {
@@ -586,15 +683,15 @@ void VT100::executeCSI(const char* seq, int len) {
 
         case 'c':  // Device Attributes
             if (_writeCallback) {
-                if (_flag == '?') {
-                    // Secondary device attribute request (ESC[?c)
-                    // Respond with detailed VT100 attributes
-                    const char* response = "\033[?6;1;2;6;15;18;20;21;22;23;24;25c";
+                if (_flag == '>') {
+                    // Secondary DA (ESC [ > c) - identify as VT102
+                    const char* response = "\033[>6;20;0c";
                     _writeCallback(response, strlen(response));
+                } else if (_flag == '?') {
+                    // Tertiary DA (ESC [ ? c) - not standard, ignore
                 } else {
-                    // Primary device attribute request (ESC[c)
-                    // Respond with basic VT100 identification
-                    const char* response = "\033[?6c";  // Indicates VT100, no microprocessor, no printer
+                    // Primary DA (ESC [ c) - identify as VT102
+                    const char* response = "\033[?6c";
                     _writeCallback(response, strlen(response));
                 }
             }
@@ -606,7 +703,12 @@ void VT100::executeCSI(const char* seq, int len) {
                 // DEC Private Mode Set/Reset (ESC [ ? Pn h/l)
                 if (paramCount > 0) {
                     for (int i = 0; i < paramCount; i++) {
-                        if (params[i] == 5) {
+                        if (params[i] == 1) {
+                            // DECCKM - Application Cursor Keys
+                            _appCursorKeys = (command == 'h');
+                        } else if (params[i] == 4) {
+                            // DECSCLM - smooth scroll, ignore
+                        } else if (params[i] == 5) {
                             // DECSCNM - Screen Normal/Reverse Mode
                             _screenReverse = (command == 'h');
                         } else if (params[i] == 6) {
@@ -617,6 +719,9 @@ void VT100::executeCSI(const char* seq, int len) {
                         } else if (params[i] == 7) {
                             // DECAWM - Auto Wrap Mode
                             _autoWrap = (command == 'h');
+                        } else if (params[i] == 25) {
+                            // DECTCEM - Cursor Visibility
+                            _cursorVisible = (command == 'h');
                         }
                     }
                 }
@@ -624,7 +729,10 @@ void VT100::executeCSI(const char* seq, int len) {
                 // ANSI Mode Set/Reset (ESC [ Pn h/l)
                 if (paramCount > 0) {
                     for (int i = 0; i < paramCount; i++) {
-                        if (params[i] == 20) {
+                        if (params[i] == 4) {
+                            // IRM - Insert/Replace Mode
+                            _insertMode = (command == 'h');
+                        } else if (params[i] == 20) {
                             // LNM - Line Feed/New Line Mode
                             if (command == 'h') {
                                 _lineFeedMode = true;  // Enter sends CR LF

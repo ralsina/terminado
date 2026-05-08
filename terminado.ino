@@ -316,9 +316,9 @@ void loop()
     handleKeyPress(key);  // Process ALL key events
   }
 
-  // Handle cursor blinking
+  // Handle cursor blinking (respect DECTCEM cursor visibility)
   if (millis() - lastCursorBlink > CURSOR_BLINK_INTERVAL) {
-    cursorVisible = !cursorVisible;
+    cursorVisible = vt100.cursorVisible() ? !cursorVisible : false;
     lastCursorBlink = millis();
     renderCursor();
   }
@@ -413,7 +413,7 @@ void processKeyCharacter(char c) {
     case 'w':
     case 'W':
       if (fnKeyPressed) {
-        Serial.write("\033[A");  // Up arrow
+        Serial.write(vt100.appCursorKeys() ? "\033OA" : "\033[A");  // Up arrow
         return;
       }
       // Check for Control key before sending normal character
@@ -427,7 +427,7 @@ void processKeyCharacter(char c) {
     case 'a':
     case 'A':
       if (fnKeyPressed) {
-        Serial.write("\033[D");  // Left arrow
+        Serial.write(vt100.appCursorKeys() ? "\033OD" : "\033[D");  // Left arrow
         return;
       }
       // Check for Control key before sending normal character
@@ -441,7 +441,7 @@ void processKeyCharacter(char c) {
     case 's':
     case 'S':
       if (fnKeyPressed) {
-        Serial.write("\033[B");  // Down arrow
+        Serial.write(vt100.appCursorKeys() ? "\033OB" : "\033[B");  // Down arrow
         return;
       }
       // Check for Control key before sending normal character
@@ -455,7 +455,7 @@ void processKeyCharacter(char c) {
     case 'd':
     case 'D':
       if (fnKeyPressed) {
-        Serial.write("\033[C");  // Right arrow
+        Serial.write(vt100.appCursorKeys() ? "\033OC" : "\033[C");  // Right arrow
         return;
       }
       // Check for Control key before sending normal character
