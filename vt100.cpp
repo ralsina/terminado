@@ -497,6 +497,17 @@ void VT100::executeCSI(const char* seq, int len) {
             }
             break;
 
+        case 'x':  // DECREQTPARM - Request Terminal Parameters
+            if (_writeCallback) {
+                // params[0]: 0 or 1 (request type); response sol = params[0] + 2
+                int sol = ((paramCount > 0 && params[0] == 1) ? 1 : 0) + 2;
+                // par=1 (no parity), nbits=1 (8 bits), xspeed=rspeed=128 (9600 baud), clkmul=1, flags=0
+                char response[32];
+                snprintf(response, sizeof(response), "\033[%d;1;1;128;128;1;0x", sol);
+                _writeCallback(response, strlen(response));
+            }
+            break;
+
         case 'c':  // Device Attributes
             if (_writeCallback) {
                 if (_flag == '?') {
