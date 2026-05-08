@@ -115,6 +115,12 @@ private:
     // Line Feed/New Line Mode (LNM): if set, Enter sends CR LF, else CR only
     bool _lineFeedMode;
 
+    // Auto Wrap Mode (DECAWM): if set, cursor wraps at end of line
+    bool _autoWrap;
+
+    // Tab stops (one bool per column)
+    bool _tabStops[MAX_TERM_COLS];
+
     // Escape sequence parsing
     enum State {
         STATE_GROUND,
@@ -161,6 +167,9 @@ private:
     void scrollDown();
 
     void setChar(char c, int x, int y);
+
+    // Initialize tab stops to every 8 columns
+    void initTabStops();
     
     // Convert coordinates based on origin mode
     void applyOriginMode(int& x, int& y) const;

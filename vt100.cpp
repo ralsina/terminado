@@ -22,6 +22,8 @@
         _scrollBottom(_rows - 1),
         _originMode(false),
         _lineFeedMode(false),
+        _autoWrap(true),
+        _tabStops{},
         _state(STATE_GROUND),
         _escapePos(0),
         _needsRedraw(false),
@@ -39,6 +41,9 @@
         for (int i = 0; i < _bufferSize; i++) {
             _attrs[i] = VT100Attr();
         }
+
+        // Initialize tab stops to every 8 columns
+        initTabStops();
     }
 
 // Maps Unicode box-drawing codepoints (U+2500..U+257F) to VT100 ACS letters.
@@ -232,10 +237,13 @@ void VT100::handleChar(char c) {
             _graphicsMode = false;
             break;
 
-        case '\t':  // Tab
-            _cursorX = (_cursorX + 8) & ~7;
-            if (_cursorX >= _cols) {
-                _cursorX = _cols - 1;
+        case '\t':  // Tab - advance to next tab stop
+            {
+                int next = _cursorX + 1;
+                while (next < _cols && !_tabStops[next]) {
+                    next++;
+                }
+                _cursorX = (next < _cols) ? next : _cols - 1;
             }
             break;
 
@@ -255,6 +263,12 @@ void VT100::handleChar(char c) {
                 advanceCursor();
             }
             break;
+    }
+}
+
+void VT100::initTabStops() {
+    for (int i = 0; i < MAX_TERM_COLS; i++) {
+        _tabStops[i] = (i % 8 == 0 && i > 0);
     }
 }
 
@@ -289,6 +303,13 @@ void VT100::handleEscape(char c) {
 
         case 'c':  // Reset Device
             clearScreen();
+            initTabStops();
+            break;
+
+        case 'H':  // HTS - Horizontal Tab Set (set tab stop at current column)
+            if (_cursorX < MAX_TERM_COLS) {
+                _tabStops[_cursorX] = true;
+            }
             break;
 
         default:
@@ -528,7 +549,14 @@ void VT100::executeCSI(const char* seq, int len) {
         case 'l':  // Reset Mode (RM)
             if (_flag == '?') {
                 // DEC Private Mode Set/Reset (ESC [ ? Pn h/l)
-                // (no DEC private modes currently handled here)
+                if (paramCount > 0) {
+                    for (int i = 0; i < paramCount; i++) {
+                        if (params[i] == 7) {
+                            // DECAWM - Auto Wrap Mode
+                            _autoWrap = (command == 'h');
+                        }
+                    }
+                }
             } else {
                 // ANSI Mode Set/Reset (ESC [ Pn h/l)
                 if (paramCount > 0) {
@@ -543,6 +571,18 @@ void VT100::executeCSI(const char* seq, int len) {
                         }
                     }
                 }
+            }
+            break;
+
+        case 'g':  // TBC - Tab Clear
+            if (params[0] == 0) {
+                // Clear tab stop at current column
+                if (_cursorX < MAX_TERM_COLS) {
+                    _tabStops[_cursorX] = false;
+                }
+            } else if (params[0] == 3) {
+                // Clear all tab stops
+                memset(_tabStops, 0, sizeof(_tabStops));
             }
             break;
 
@@ -601,8 +641,12 @@ void VT100::setCursor(int x, int y) {
 void VT100::advanceCursor() {
     _cursorX++;
     if (_cursorX >= _cols) {
-        _cursorX = 0;
-        newline();
+        if (_autoWrap) {
+            _cursorX = 0;
+            newline();
+        } else {
+            _cursorX = _cols - 1;
+        }
     }
 }
 
