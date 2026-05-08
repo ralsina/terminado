@@ -11,10 +11,22 @@ Description	:	VT100 terminal emulator with BBQ20 keyboard and serial communicati
 #include <BBQ10Keyboard.h>
 #include "term_config.h"
 #include "vt100.h"
-#include "iosevka.h"
-#include "iosevka_bold.h"
-#include "iosevka_italic.h"
-#include "iosevka_bolditalic.h"
+#include "iosevka_regular_4pt.h"
+#include "iosevka_bold_4pt.h"
+#include "iosevka_italic_4pt.h"
+#include "iosevka_bolditalic_4pt.h"
+#include "iosevka_regular_6pt.h"
+#include "iosevka_bold_6pt.h"
+#include "iosevka_italic_6pt.h"
+#include "iosevka_bolditalic_6pt.h"
+#include "iosevka_regular_7pt.h"
+#include "iosevka_bold_7pt.h"
+#include "iosevka_italic_7pt.h"
+#include "iosevka_bolditalic_7pt.h"
+#include "iosevka_regular_10pt.h"
+#include "iosevka_bold_10pt.h"
+#include "iosevka_italic_10pt.h"
+#include "iosevka_bolditalic_10pt.h"
 #include "config_menu.h"
 
 BBQ10Keyboard keyboard;
@@ -86,6 +98,27 @@ uint16_t termFontLast = 0x7E;
 int termCharOffsetX = 0;
 int termCharOffsetY = 1;
 
+// Returns the right GFXfont* for the current size index and attributes
+const GFXfont* getTermFont(int sizeIdx, bool bold, bool italic) {
+  static const GFXfont* FONTS[4][4] = {
+    // sizeIdx 0 = 4pt
+    { &IosevkaNerdFontMono_Regular4pt8b, &IosevkaNerdFontMono_Bold4pt8b,
+      &IosevkaNerdFontMono_Italic4pt8b,  &IosevkaNerdFontMono_BoldItalic4pt8b },
+    // sizeIdx 1 = 6pt
+    { &IosevkaNerdFontMono_Regular6pt8b, &IosevkaNerdFontMono_Bold6pt8b,
+      &IosevkaNerdFontMono_Italic6pt8b,  &IosevkaNerdFontMono_BoldItalic6pt8b },
+    // sizeIdx 2 = 7pt
+    { &IosevkaNerdFontMono_Regular7pt8b, &IosevkaNerdFontMono_Bold7pt8b,
+      &IosevkaNerdFontMono_Italic7pt8b,  &IosevkaNerdFontMono_BoldItalic7pt8b },
+    // sizeIdx 3 = 10pt
+    { &IosevkaNerdFontMono_Regular10pt8b, &IosevkaNerdFontMono_Bold10pt8b,
+      &IosevkaNerdFontMono_Italic10pt8b,  &IosevkaNerdFontMono_BoldItalic10pt8b },
+  };
+  int si = constrain(sizeIdx, 0, 3);
+  int vi = (bold && italic) ? 3 : bold ? 1 : italic ? 2 : 0;
+  return FONTS[si][vi];
+}
+
 void configureTerminalGeometryFromFont() {
   uint8_t baseWidth = TERM_DEFAULT_BASE_WIDTH;
   uint8_t baseHeight = TERM_DEFAULT_BASE_HEIGHT;
@@ -95,7 +128,7 @@ void configureTerminalGeometryFromFont() {
   int glyphVisualHeight = baseHeight;
 
   #if USE_CUSTOM_FONT
-  const GFXfont* selectedFont = &IosevkaNerdFontMono_Regular7pt8b;
+  const GFXfont* selectedFont = getTermFont(termConfig.fontSizeIndex, false, false);
   tft.setFont(selectedFont);
 
   uint16_t metricFirst = max(static_cast<uint16_t>(selectedFont->first), static_cast<uint16_t>(0x20));
@@ -230,8 +263,10 @@ void renderStatusBar() {
     int py = TERM_OFFSET_Y + vt100.rows() * termCellHeight;
 
     // Clear the status bar
-    tft.fillRect(0, py, SCREEN_WIDTH, termCellHeight, TFT_BLUE);
+    tft.fillRect(0, py, SCREEN_WIDTH, SCREEN_HEIGHT - py, TFT_BLUE);
 
+    tft.setFont(getTermFont(termConfig.fontSizeIndex, false, false));
+    tft.setTextSize(1);
     tft.setCursor(2, py + 1);
     tft.setTextColor(TFT_WHITE, TFT_BLUE);
     tft.print(currentContent);
@@ -240,6 +275,7 @@ void renderStatusBar() {
 
 void setup()
 {
+  menuLoadConfig(); // Restore settings from NVS
   Serial.begin(configMenuGetBaud()); // Baud from config
 
   // Explicitly initialize modifier states
@@ -411,7 +447,9 @@ void processKeyCharacter(char c) {
   if (configMenuIsActive()) {
     if (configMenuHandleKey(c, fnKeyPressed)) {
       if (!configMenuIsActive()) {
-        // Menu just closed — force full terminal redraw
+        // Menu just closed — reconfigure geometry (font may have changed) and redraw
+        configureTerminalGeometryFromFont();
+        statusNeedsUpdate = true;
         tft.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, TFT_BLACK);
         renderTerminal();
         renderStatusBar();
@@ -684,20 +722,13 @@ void renderChar(int x, int y, char c) {
       drawLineDrawingChar(px, py, printable, fg);
     } else {
       #if USE_CUSTOM_FONT
-      if (attr.bold && attr.italic)
-        tft.setFont(&IosevkaNerdFontMono_BoldItalic7pt8b);
-      else if (attr.bold)
-        tft.setFont(&IosevkaNerdFontMono_Bold7pt8b);
-      else if (attr.italic)
-        tft.setFont(&IosevkaNerdFontMono_Italic7pt8b);
-      else
-        tft.setFont(&IosevkaNerdFontMono_Regular7pt8b);
+      tft.setFont(getTermFont(termConfig.fontSizeIndex, attr.bold, attr.italic));
       #endif
       tft.setCursor(px + termCharOffsetX, py + termCharOffsetY);
       tft.setTextColor(fg, bg);
       tft.print(printable);
       #if USE_CUSTOM_FONT
-      tft.setFont(&IosevkaNerdFontMono_Regular7pt8b);  // restore default
+      tft.setFont(getTermFont(termConfig.fontSizeIndex, false, false));  // restore default
       #endif
     }
   }

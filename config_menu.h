@@ -12,6 +12,7 @@
 
 #include "gfx_conf.h"
 #include "term_config.h"
+#include <Preferences.h>
 
 // ── Persistent settings ───────────────────────────────────────────────────────
 
@@ -21,6 +22,7 @@ struct TermConfig {
     int  stopBits;        // 1,2
     int  parityIndex;     // 0=None, 1=Even, 2=Odd
     bool xonXoff;         // software flow control
+    int  fontSizeIndex;   // index into FONT_SIZES[]
 };
 
 static const int BAUD_RATES[] = {
@@ -28,14 +30,17 @@ static const int BAUD_RATES[] = {
 };
 static const int BAUD_COUNT = sizeof(BAUD_RATES) / sizeof(BAUD_RATES[0]);
 static const char* PARITY_NAMES[] = { "None", "Even", "Odd" };
+static const int FONT_SIZES[] = { 4, 6, 7, 10 };
+static const int FONT_SIZE_COUNT = 4;
 
 // Default settings
 static TermConfig termConfig = {
-    .baudIndex   = 5,    // 19200
-    .dataBits    = 8,
-    .stopBits    = 1,
-    .parityIndex = 0,    // None
-    .xonXoff     = true
+    .baudIndex     = 5,    // 19200
+    .dataBits      = 8,
+    .stopBits      = 1,
+    .parityIndex   = 0,    // None
+    .xonXoff       = true,
+    .fontSizeIndex = 2,    // 7pt
 };
 
 // ── Menu state ────────────────────────────────────────────────────────────────
@@ -43,13 +48,14 @@ static TermConfig termConfig = {
 static bool menuActive = false;
 static int  menuSelectedRow = 0;
 
-// ── Layout constants ──────────────────────────────────────────────────────────
+// ── Layout constants ─────────────────────────────────────────────────────────
+// Navigation: plain W/A/S/D (no Fn needed)
 
 static const int MENU_W       = 360;
-static const int MENU_H       = 230;
+static const int MENU_H       = 260;
 static const int MENU_X       = (SCREEN_WIDTH  - MENU_W) / 2;
 static const int MENU_Y       = (SCREEN_HEIGHT - MENU_H) / 2;
-static const int MENU_ROWS    = 5;   // number of setting rows
+static const int MENU_ROWS    = 6;   // number of setting rows
 static const int ROW_H        = 30;
 static const int LABEL_X      = MENU_X + 12;
 static const int VALUE_X      = MENU_X + 200;
@@ -78,22 +84,24 @@ static void menuDrawRow(int row, bool selected) {
 
     // Label
     switch (row) {
-        case 0: tft.print("Baud Rate");   break;
-        case 1: tft.print("Data Bits");   break;
-        case 2: tft.print("Stop Bits");   break;
-        case 3: tft.print("Parity");      break;
-        case 4: tft.print("XON/XOFF");    break;
+        case 0: tft.print("Font Size");   break;
+        case 1: tft.print("Baud Rate");   break;
+        case 2: tft.print("Data Bits");   break;
+        case 3: tft.print("Stop Bits");   break;
+        case 4: tft.print("Parity");      break;
+        case 5: tft.print("XON/XOFF");    break;
     }
 
     // Value
     tft.setTextColor(COL_VALUE, bg);
     tft.setCursor(VALUE_X, ry + 8);
     switch (row) {
-        case 0: tft.print(BAUD_RATES[termConfig.baudIndex]); break;
-        case 1: tft.print(termConfig.dataBits);              break;
-        case 2: tft.print(termConfig.stopBits);              break;
-        case 3: tft.print(PARITY_NAMES[termConfig.parityIndex]); break;
-        case 4: tft.print(termConfig.xonXoff ? "On" : "Off"); break;
+        case 0: tft.print(FONT_SIZES[termConfig.fontSizeIndex]); tft.print("pt"); break;
+        case 1: tft.print(BAUD_RATES[termConfig.baudIndex]); break;
+        case 2: tft.print(termConfig.dataBits);              break;
+        case 3: tft.print(termConfig.stopBits);              break;
+        case 4: tft.print(PARITY_NAMES[termConfig.parityIndex]); break;
+        case 5: tft.print(termConfig.xonXoff ? "On" : "Off"); break;
     }
 
     // Arrow hints on selected row
@@ -130,10 +138,34 @@ static void menuDraw() {
     tft.fillRect(MENU_X, hintY, MENU_W, 18, COL_TITLE_BG);
     tft.setTextColor(COL_HINT, COL_TITLE_BG);
     tft.setCursor(MENU_X + 8, hintY + 4);
-    tft.print("Fn+W/S: select  Fn+A/D: change  ESC: apply & close");
+    tft.print("W/S: select  A/D: change  ESC: apply & close");
 }
 
-// Apply the current settings to the serial port
+// Apply the current settings to the serial port and persist to NVS
+static void menuSaveConfig() {
+    Preferences prefs;
+    prefs.begin("termcfg", false);
+    prefs.putInt("baudIdx",   termConfig.baudIndex);
+    prefs.putInt("dataBits",  termConfig.dataBits);
+    prefs.putInt("stopBits",  termConfig.stopBits);
+    prefs.putInt("parityIdx", termConfig.parityIndex);
+    prefs.putBool("xonXoff",  termConfig.xonXoff);
+    prefs.putInt("fontIdx",   termConfig.fontSizeIndex);
+    prefs.end();
+}
+
+static void menuLoadConfig() {
+    Preferences prefs;
+    prefs.begin("termcfg", true); // read-only
+    termConfig.baudIndex     = prefs.getInt("baudIdx",   termConfig.baudIndex);
+    termConfig.dataBits      = prefs.getInt("dataBits",  termConfig.dataBits);
+    termConfig.stopBits      = prefs.getInt("stopBits",  termConfig.stopBits);
+    termConfig.parityIndex   = prefs.getInt("parityIdx", termConfig.parityIndex);
+    termConfig.xonXoff       = prefs.getBool("xonXoff",  termConfig.xonXoff);
+    termConfig.fontSizeIndex = prefs.getInt("fontIdx",   termConfig.fontSizeIndex);
+    prefs.end();
+}
+
 static void menuApplySettings() {
     int baud = BAUD_RATES[termConfig.baudIndex];
     uint32_t config = SERIAL_8N1;
@@ -159,6 +191,7 @@ static void menuApplySettings() {
 
     Serial.end();
     Serial.begin(baud, config);
+    menuSaveConfig();
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -175,15 +208,13 @@ static void configMenuOpen() {
 static bool configMenuHandleKey(char c, bool fnKey) {
     if (!menuActive) return false;
 
-    if (c == 5 /* ESC */ || (c == 5 && !fnKey)) {
+    if (c == 5 /* ESC */) {
         // ESC: apply and close
         menuApplySettings();
         menuActive = false;
         // Force full terminal redraw
         return true;
     }
-
-    if (!fnKey) return true;  // swallow all keys while menu is open
 
     bool changed = false;
     switch (c) {
@@ -197,21 +228,23 @@ static bool configMenuHandleKey(char c, bool fnKey) {
             break;
         case 'a': case 'A':  // left (decrement)
             switch (menuSelectedRow) {
-                case 0: termConfig.baudIndex   = (termConfig.baudIndex + BAUD_COUNT - 1) % BAUD_COUNT; break;
-                case 1: termConfig.dataBits    = max(5, termConfig.dataBits - 1); break;
-                case 2: termConfig.stopBits    = max(1, termConfig.stopBits - 1); break;
-                case 3: termConfig.parityIndex = (termConfig.parityIndex + 2) % 3; break;
-                case 4: termConfig.xonXoff     = !termConfig.xonXoff; break;
+                case 0: termConfig.fontSizeIndex = (termConfig.fontSizeIndex + FONT_SIZE_COUNT - 1) % FONT_SIZE_COUNT; break;
+                case 1: termConfig.baudIndex     = (termConfig.baudIndex + BAUD_COUNT - 1) % BAUD_COUNT; break;
+                case 2: termConfig.dataBits      = max(5, termConfig.dataBits - 1); break;
+                case 3: termConfig.stopBits      = max(1, termConfig.stopBits - 1); break;
+                case 4: termConfig.parityIndex   = (termConfig.parityIndex + 2) % 3; break;
+                case 5: termConfig.xonXoff       = !termConfig.xonXoff; break;
             }
             changed = true;
             break;
         case 'd': case 'D':  // right (increment)
             switch (menuSelectedRow) {
-                case 0: termConfig.baudIndex   = (termConfig.baudIndex + 1) % BAUD_COUNT; break;
-                case 1: termConfig.dataBits    = min(8, termConfig.dataBits + 1); break;
-                case 2: termConfig.stopBits    = min(2, termConfig.stopBits + 1); break;
-                case 3: termConfig.parityIndex = (termConfig.parityIndex + 1) % 3; break;
-                case 4: termConfig.xonXoff     = !termConfig.xonXoff; break;
+                case 0: termConfig.fontSizeIndex = (termConfig.fontSizeIndex + 1) % FONT_SIZE_COUNT; break;
+                case 1: termConfig.baudIndex     = (termConfig.baudIndex + 1) % BAUD_COUNT; break;
+                case 2: termConfig.dataBits      = min(8, termConfig.dataBits + 1); break;
+                case 3: termConfig.stopBits      = min(2, termConfig.stopBits + 1); break;
+                case 4: termConfig.parityIndex   = (termConfig.parityIndex + 1) % 3; break;
+                case 5: termConfig.xonXoff       = !termConfig.xonXoff; break;
             }
             changed = true;
             break;

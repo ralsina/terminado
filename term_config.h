@@ -33,8 +33,9 @@
 #define TERM_DEFAULT_ROWS ((SCREEN_HEIGHT / TERM_DEFAULT_CELL_HEIGHT) - 1)
 
 // Maximum buffer size is based on the smallest supported cell dimensions.
-#define TERM_MIN_CELL_WIDTH ((8 * FONT_MULTIPLIER) + 1)
-#define TERM_MIN_CELL_HEIGHT ((8 * FONT_MULTIPLIER) + 2)
+// 4pt font has xAdvance=4, yAdvance=10; with padding: 6x12 per cell.
+#define TERM_MIN_CELL_WIDTH  6
+#define TERM_MIN_CELL_HEIGHT 10
 
 #define MAX_TERM_COLS (SCREEN_WIDTH / TERM_MIN_CELL_WIDTH)
 #define MAX_TERM_ROWS ((SCREEN_HEIGHT / TERM_MIN_CELL_HEIGHT) - 1)

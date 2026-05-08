@@ -114,6 +114,12 @@ void VT100::setGeometry(int cols, int rows) {
     _rows = constrain(rows, 1, MAX_TERM_ROWS);
     _bufferSize = _cols * _rows;
     clearScreen();
+    // Notify the host of the new window size so it fires SIGWINCH
+    if (_writeCallback) {
+        char buf[32];
+        int len = snprintf(buf, sizeof(buf), "\033[8;%d;%dt", _rows, _cols);
+        _writeCallback(buf, len);
+    }
 }
 
 void VT100::process(char c) {
