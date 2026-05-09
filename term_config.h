@@ -39,9 +39,9 @@
 
 #if USE_CUSTOM_FONT
 // Padding used around glyphs in each terminal cell.
-// Reduced vertical padding to fit more rows on small 240x320 display
-#define TERM_CELL_HPAD 2
-#define TERM_CELL_VPAD 1  // Reduced from 2 to 1
+// Tom Thumb is very compact, so use minimal padding for maximum columns
+#define TERM_CELL_HPAD 0  // No horizontal padding needed for Tom Thumb (xAdvance=3-4)
+#define TERM_CELL_VPAD 0  // No vertical padding needed (yAdvance=6 includes spacing)
 #else
 #define TERM_CELL_HPAD 1
 #define TERM_CELL_VPAD 2
@@ -58,18 +58,18 @@
 #define TERM_DEFAULT_ROWS ((SCREEN_HEIGHT / TERM_DEFAULT_CELL_HEIGHT) - 1)
 
 // Maximum buffer size is based on the smallest supported cell dimensions.
-// Tom Thumb has xAdvance=4, yAdvance=6; with HPAD=2: 6x6 per cell.
-// 4pt Iosevka has xAdvance≈4, yAdvance=10; with HPAD=2: 6x10 per cell.
-// 6pt Iosevka has xAdvance≈6, yAdvance=14; with HPAD=2: 8x14 per cell.
-#define TERM_MIN_CELL_WIDTH  6
+// Tom Thumb has xAdvance=3-4, yAdvance=6; no padding: 3-4x6 per cell.
+// 4pt Iosevka has xAdvance≈4, yAdvance=10; with HPAD=0: 4x10 per cell.
+// 6pt Iosevka has xAdvance≈6, yAdvance=14; with HPAD=0: 6x14 per cell.
+#define TERM_MIN_CELL_WIDTH  3  // Tom Thumb narrow chars (i, l, space)
 #define TERM_MIN_CELL_HEIGHT 6  // Tom Thumb yAdvance=6 (smallest)
 
 // Maximum size for Tom Thumb on 320x240 display:
-// Columns: 320/6 ≈ 53 chars
+// Columns: 320/3 ≈ 106 chars (realistic ~80 with mixed chars)
 // Rows: (240/6)-1 = 39 chars (minus 1 for status bar)
-#define MAX_TERM_COLS 53
+#define MAX_TERM_COLS 106
 #define MAX_TERM_ROWS 39
-#define MAX_TERM_BUFFER_SIZE (MAX_TERM_COLS * MAX_TERM_ROWS)  // 2067 chars max
+#define MAX_TERM_BUFFER_SIZE (MAX_TERM_COLS * MAX_TERM_ROWS)  // 4134 chars max
 
 #define TERM_OFFSET_X 0
 #define TERM_OFFSET_Y 0
