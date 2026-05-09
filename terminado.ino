@@ -224,23 +224,6 @@ void configureTerminalGeometryFromFont() {
   int runtimeRows = (SCREEN_HEIGHT / termCellHeight) - 1;
   runtimeCols = constrain(runtimeCols, 1, MAX_TERM_COLS);
   runtimeRows = constrain(runtimeRows, 1, MAX_TERM_ROWS);
-
-  // Debug output
-  Serial.print("Font sizeIdx: ");
-  Serial.print(termConfig.fontSizeIndex);
-  Serial.print(" baseWidth: ");
-  Serial.print(baseWidth);
-  Serial.print(" baseHeight: ");
-  Serial.print(baseHeight);
-  Serial.print(" cellWidth: ");
-  Serial.print(termCellWidth);
-  Serial.print(" cellHeight: ");
-  Serial.print(termCellHeight);
-  Serial.print(" cols: ");
-  Serial.print(runtimeCols);
-  Serial.print(" rows: ");
-  Serial.println(runtimeRows);
-
   vt100.setGeometry(runtimeCols, runtimeRows);
 }
 
