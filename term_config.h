@@ -58,18 +58,18 @@
 #define TERM_DEFAULT_ROWS ((SCREEN_HEIGHT / TERM_DEFAULT_CELL_HEIGHT) - 1)
 
 // Maximum buffer size is based on the smallest supported cell dimensions.
-// Tom Thumb has xAdvance=3-4, yAdvance=6; no padding: 3-4x6 per cell.
-// 4pt Iosevka has xAdvance≈4, yAdvance=10; with HPAD=0: 4x10 per cell.
-// 6pt Iosevka has xAdvance≈6, yAdvance=14; with HPAD=0: 6x14 per cell.
-#define TERM_MIN_CELL_WIDTH  3  // Tom Thumb narrow chars (i, l, space)
+// Tom Thumb: max xAdvance=4, yAdvance=6; no padding: 4x6 per cell.
+// 4pt Iosevka: max xAdvance≈4, yAdvance=10; no padding: 4x10 per cell.
+// 6pt Iosevka: max xAdvance≈6, yAdvance=14; no padding: 6x14 per cell.
+#define TERM_MIN_CELL_WIDTH  4  // Tom Thumb max xAdvance=4
 #define TERM_MIN_CELL_HEIGHT 6  // Tom Thumb yAdvance=6 (smallest)
 
 // Maximum size for Tom Thumb on 320x240 display:
-// Columns: 320/3 ≈ 106 chars (realistic ~80 with mixed chars)
+// Columns: 320/4 = 80 chars (uses max xAdvance for monospaced grid)
 // Rows: (240/6)-1 = 39 chars (minus 1 for status bar)
-#define MAX_TERM_COLS 106
+#define MAX_TERM_COLS 80
 #define MAX_TERM_ROWS 39
-#define MAX_TERM_BUFFER_SIZE (MAX_TERM_COLS * MAX_TERM_ROWS)  // 4134 chars max
+#define MAX_TERM_BUFFER_SIZE (MAX_TERM_COLS * MAX_TERM_ROWS)  // 3120 chars max
 
 #define TERM_OFFSET_X 0
 #define TERM_OFFSET_Y 0
