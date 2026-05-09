@@ -5,6 +5,9 @@
 #include <LovyanGFX.hpp>
 #include <lgfx/v1/platforms/esp32s3/Panel_RGB.hpp>
 #include <lgfx/v1/platforms/esp32s3/Bus_RGB.hpp>
+#include <lgfx/v1/panel/Panel_ILI9341.hpp>
+#include <lgfx/v1/panel/Panel_ST7789.hpp>
+#include <lgfx/v1/platforms/esp32/Bus_SPI.hpp>
 #include <driver/i2c.h>
 
 /*******************************************************************************
@@ -12,10 +15,12 @@
  * CrowPanel_43 means CrowPanel 4.3inch Board
  * CrowPanel_50 means CrowPanel 5.0inch Board
  * CrowPanel_70 means CrowPanel 7.0inch Board
+ * ESP32_2432S028R means ESP32-2432S028R (320x240 ILI9341 SPI display)
  ******************************************************************************/
 // #define CrowPanel_70
- #define CrowPanel_50
+// #define CrowPanel_50
 // #define CrowPanel_43
+#define ESP32_2432S028R
 
 
 #if defined (CrowPanel_50)
@@ -75,7 +80,7 @@ public:
             cfg.hsync_front_porch = 8;
             cfg.hsync_pulse_width = 4;
             cfg.hsync_back_porch  = 43;
-            
+
             cfg.vsync_polarity    = 0;
             cfg.vsync_front_porch = 8;
             cfg.vsync_pulse_width = 4;
@@ -115,6 +120,71 @@ public:
         //     _touch_instance.config(cfg);
         //     _panel_instance.setTouch(&_touch_instance);
         // }
+        setPanel(&_panel_instance);
+    }
+};
+
+#elif defined (ESP32_2432S028R)
+
+#define screenWidth   320
+#define screenHeight  240
+
+class LGFX : public lgfx::LGFX_Device
+{
+public:
+    lgfx::Bus_SPI _bus_instance;
+    lgfx::Panel_ST7789 _panel_instance;  // ST7789 for 2-port CYD version
+    lgfx::Light_PWM _light_instance;
+
+    LGFX(void)
+    {
+        {
+            auto cfg = _bus_instance.config();
+            cfg.spi_host = SPI2_HOST;
+            cfg.spi_mode = 0;
+            cfg.freq_write = 80000000;  // ST7789 can handle 80MHz
+            cfg.freq_read = 16000000;
+            cfg.spi_3wire = false;
+            cfg.use_lock = true;
+            cfg.dma_channel = 1;
+            cfg.pin_sclk = 14;   // SCLK
+            cfg.pin_mosi = 13;   // MOSI
+            cfg.pin_miso = 12;   // MISO
+            cfg.pin_dc = 2;      // DC
+            _bus_instance.config(cfg);
+            _panel_instance.setBus(&_bus_instance);
+        }
+
+        {
+            auto cfg = _panel_instance.config();
+            cfg.pin_cs = 15;     // CS
+            cfg.pin_rst = -1;    // RST - not connected
+            cfg.pin_busy = -1;   // BUSY
+            cfg.memory_width = 240;
+            cfg.memory_height = 320;
+            cfg.panel_width = 240;
+            cfg.panel_height = 320;
+            cfg.offset_rotation = 0;
+            cfg.dummy_read_pixel = 16;  // ST7789 requires 16 dummy read bits
+            cfg.dummy_read_bits = 1;
+            cfg.readable = true;
+            cfg.invert = false;
+            cfg.rgb_order = false;
+            cfg.dlen_16bit = false;
+            cfg.bus_shared = false;
+            _panel_instance.config(cfg);
+        }
+
+        {
+            auto cfg = _light_instance.config();
+            cfg.pin_bl = 21;  // Backlight control
+            cfg.invert = false;
+            cfg.freq = 44100;
+            cfg.pwm_channel = 7;
+            _light_instance.config(cfg);
+            _panel_instance.setLight(&_light_instance);
+        }
+
         setPanel(&_panel_instance);
     }
 };

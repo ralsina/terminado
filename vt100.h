@@ -23,19 +23,23 @@ enum VT100Color {
     VT100_COLOR_WHITE = 7
 };
 
-// Character attributes
+// Optimized character attributes using bit fields and packed storage
 struct VT100Attr {
-    bool bold;
-    bool underline;
-    bool italic;
-    bool reverse;
-    bool blink;
-    bool graphics;  // true = VT100 line-drawing charset (ESC ( 0)
-    VT100Color fg;
-    VT100Color bg;
+    // Pack boolean flags into a single byte (6 bits used, 2 spare)
+    unsigned int bold      : 1;  // bit 0
+    unsigned int underline : 1;  // bit 1
+    unsigned int italic    : 1;  // bit 2
+    unsigned int reverse   : 1;  // bit 3
+    unsigned int blink     : 1;  // bit 4
+    unsigned int graphics  : 1;  // bit 5
 
-    VT100Attr() : bold(false), underline(false), italic(false), reverse(false), blink(false),
-                  graphics(false), fg(VT100_COLOR_WHITE), bg(VT100_COLOR_BLACK) {}
+    // Use 3 bits each for colors (8 colors = 3 bits)
+    unsigned int fg        : 3;  // bits 6-8
+    unsigned int bg        : 3;  // bits 9-11
+
+    // Total: 2 bytes per cell instead of 16!
+    VT100Attr() : bold(0), underline(0), italic(0), reverse(0), blink(0),
+                  graphics(0), fg(VT100_COLOR_WHITE), bg(VT100_COLOR_BLACK) {}
 };
 
 // Terminal state

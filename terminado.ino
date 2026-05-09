@@ -27,10 +27,11 @@ Description	:	VT100 terminal emulator with BBQ20 keyboard and serial communicati
 #include "iosevka_bold_10pt.h"
 #include "iosevka_italic_10pt.h"
 #include "iosevka_bolditalic_10pt.h"
+#include "picopixel.h"
 #include "config_menu.h"
 
 BBQ10Keyboard keyboard;
-VT100 vt100;
+VT100 vt100;  // Re-enabled with reduced memory footprint
 
 // Modifier key states
 bool fnKeyPressed = false;
@@ -100,23 +101,23 @@ int termCharOffsetY = 1;
 
 // Returns the right GFXfont* for the current size index and attributes
 const GFXfont* getTermFont(int sizeIdx, bool bold, bool italic) {
-  static const GFXfont* FONTS[4][4] = {
-    // sizeIdx 0 = 4pt
+  // Picopixel (sizeIdx 0) has no bold/italic variants
+  if (sizeIdx == 0) {
+    return &Picopixel;
+  }
+
+  // Iosevka fonts (sizeIdx 1-2)
+  static const GFXfont* IosevkaFonts[2][4] = {
+    // sizeIdx 1 = 4pt
     { &IosevkaNerdFontMono_Regular4pt8b, &IosevkaNerdFontMono_Bold4pt8b,
       &IosevkaNerdFontMono_Italic4pt8b,  &IosevkaNerdFontMono_BoldItalic4pt8b },
-    // sizeIdx 1 = 6pt
+    // sizeIdx 2 = 6pt
     { &IosevkaNerdFontMono_Regular6pt8b, &IosevkaNerdFontMono_Bold6pt8b,
       &IosevkaNerdFontMono_Italic6pt8b,  &IosevkaNerdFontMono_BoldItalic6pt8b },
-    // sizeIdx 2 = 7pt
-    { &IosevkaNerdFontMono_Regular7pt8b, &IosevkaNerdFontMono_Bold7pt8b,
-      &IosevkaNerdFontMono_Italic7pt8b,  &IosevkaNerdFontMono_BoldItalic7pt8b },
-    // sizeIdx 3 = 10pt
-    { &IosevkaNerdFontMono_Regular10pt8b, &IosevkaNerdFontMono_Bold10pt8b,
-      &IosevkaNerdFontMono_Italic10pt8b,  &IosevkaNerdFontMono_BoldItalic10pt8b },
   };
-  int si = constrain(sizeIdx, 0, 3);
+  int si = constrain(sizeIdx - 1, 0, 1);  // Map 1-2 to 0-1
   int vi = (bold && italic) ? 3 : bold ? 1 : italic ? 2 : 0;
-  return FONTS[si][vi];
+  return IosevkaFonts[si][vi];
 }
 
 void configureTerminalGeometryFromFont() {
@@ -187,7 +188,9 @@ void configureTerminalGeometryFromFont() {
   if (haveGlyphBounds) {
     glyphMinX = minX;
     glyphVisualWidth = max(static_cast<int>(baseWidth), maxX - minX);
-    glyphVisualHeight = max(static_cast<int>(baseHeight), maxAscent + maxDescent);
+    // Don't use glyphVisualHeight for cell size - yAdvance is authoritative
+    // glyphVisualHeight = max(static_cast<int>(baseHeight), maxAscent + maxDescent);
+    glyphVisualHeight = baseHeight; // Use yAdvance as the height
     termCharOffsetX = max(0, -minX) * FONT_MULTIPLIER;
     termCharOffsetY = TERM_CELL_VPAD / 2;
   }
@@ -205,7 +208,8 @@ void configureTerminalGeometryFromFont() {
   int scaledAdvanceHeight = baseHeight * FONT_MULTIPLIER;
 
   termCellWidth = max(scaledAdvanceWidth, scaledGlyphWidth) + TERM_CELL_HPAD;
-  termCellHeight = max(scaledAdvanceHeight, scaledGlyphHeight) + TERM_CELL_VPAD;
+  // Don't add TERM_CELL_VPAD to yAdvance - it already includes line spacing
+  termCellHeight = max(scaledAdvanceHeight, scaledGlyphHeight);
 
   #if USE_CUSTOM_FONT
   termCharOffsetX += TERM_CELL_HPAD / 2;
@@ -215,6 +219,7 @@ void configureTerminalGeometryFromFont() {
   #endif
 
   int runtimeCols = SCREEN_WIDTH / termCellWidth;
+  // Leave room for status bar (approximately 1 row)
   int runtimeRows = (SCREEN_HEIGHT / termCellHeight) - 1;
   runtimeCols = constrain(runtimeCols, 1, MAX_TERM_COLS);
   runtimeRows = constrain(runtimeRows, 1, MAX_TERM_ROWS);
@@ -260,47 +265,57 @@ void renderStatusBar() {
     lastStatusContent = currentContent;
     statusNeedsUpdate = false;
 
+    // Calculate status bar position (bottom of screen)
     int py = TERM_OFFSET_Y + vt100.rows() * termCellHeight;
 
-    // Clear the status bar
-    tft.fillRect(0, py, SCREEN_WIDTH, SCREEN_HEIGHT - py, TFT_BLUE);
+    // Ensure status bar fits on screen
+    if (py >= SCREEN_HEIGHT) {
+      py = SCREEN_HEIGHT - termCellHeight - 2; // Leave room for status bar
+    }
 
+    int statusBarHeight = SCREEN_HEIGHT - py;
+
+    // Clear the status bar
+    tft.fillRect(0, py, SCREEN_WIDTH, statusBarHeight, TFT_BLUE);
+
+    // Use smaller font for status bar to ensure it fits
     tft.setFont(getTermFont(termConfig.fontSizeIndex, false, false));
     tft.setTextSize(1);
-    tft.setCursor(2, py + 1);
+    tft.setCursor(2, py + 2); // Small offset from top of status bar
     tft.setTextColor(TFT_WHITE, TFT_BLUE);
+
+    // Truncate text if it's too long
+    if (currentContent.length() > 40) {
+      currentContent = currentContent.substring(0, 37) + "...";
+    }
     tft.print(currentContent);
   }
 }
 
 void setup()
 {
-  menuLoadConfig(); // Restore settings from NVS
-  Serial.begin(configMenuGetBaud()); // Baud from config
+  // Use configured baud rate instead of hardcoded 115200
+  Serial.begin(configMenuGetBaud());
+  delay(500);
 
-  // Explicitly initialize modifier states
-  fnKeyPressed = false;
-  ctrlKeyPressed = false;
+  tft.begin();
+  tft.setRotation(1);
+  tft.fillScreen(TFT_BLACK);
 
   // Initialize I2C with slower speed for BBQ20 keyboard compatibility
-  Wire.begin(19, 20);  // I2C for Elecrow ESP32-S3 HMI: SDA=IO19, SCL=IO20
+  Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);  // I2C for BBQ20 keyboard - board-specific pins
   Wire.setClock(100000); // Lower I2C speed to 100kHz for BBQ20 keyboard compatibility
 
   // Initialize keyboard after I2C is set up
   keyboard.begin();
   keyboard.setBacklight(0.5f); // 50% keyboard backlight
 
-  // Display Prepare
-  tft.begin();
-  tft.setRotation(2); // Flip screen vertically (180 degree rotation)
-  tft.fillScreen(TFT_BLACK);
+  // Load config after keyboard
+  menuLoadConfig(); // Restore settings from NVS
 
-  // Draw title
-  tft.setCursor(200, 240);
-  tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft.print("VT100 Terminal Ready");
-  delay(500);
-  tft.fillScreen(TFT_BLACK);
+  // Explicitly initialize modifier states
+  fnKeyPressed = false;
+  ctrlKeyPressed = false;
 
   // Set font and runtime geometry AFTER library is initialized.
   configureTerminalGeometryFromFont();

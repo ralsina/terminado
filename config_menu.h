@@ -30,8 +30,8 @@ static const int BAUD_RATES[] = {
 };
 static const int BAUD_COUNT = sizeof(BAUD_RATES) / sizeof(BAUD_RATES[0]);
 static const char* PARITY_NAMES[] = { "None", "Even", "Odd" };
-static const int FONT_SIZES[] = { 4, 6, 7, 10 };
-static const int FONT_SIZE_COUNT = 4;
+static const int FONT_SIZES[] = { 0, 4, 6 };  // 0=Picopixel, 4=Iosevka 4pt, 6=Iosevka 6pt
+static const int FONT_SIZE_COUNT = 3;
 
 // Default settings
 static TermConfig termConfig = {
@@ -40,7 +40,7 @@ static TermConfig termConfig = {
     .stopBits      = 1,
     .parityIndex   = 0,    // None
     .xonXoff       = true,
-    .fontSizeIndex = 2,    // 7pt
+    .fontSizeIndex = 0,    // Picopixel (tiny font for max columns)
 };
 
 // ── Menu state ────────────────────────────────────────────────────────────────
@@ -96,7 +96,13 @@ static void menuDrawRow(int row, bool selected) {
     tft.setTextColor(COL_VALUE, bg);
     tft.setCursor(VALUE_X, ry + 8);
     switch (row) {
-        case 0: tft.print(FONT_SIZES[termConfig.fontSizeIndex]); tft.print("pt"); break;
+        case 0:
+            if (FONT_SIZES[termConfig.fontSizeIndex] == 0) {
+                tft.print("Picopixel");
+            } else {
+                tft.print(FONT_SIZES[termConfig.fontSizeIndex]); tft.print("pt");
+            }
+            break;
         case 1: tft.print(BAUD_RATES[termConfig.baudIndex]); break;
         case 2: tft.print(termConfig.dataBits);              break;
         case 3: tft.print(termConfig.stopBits);              break;
