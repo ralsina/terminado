@@ -206,9 +206,11 @@ void configureTerminalGeometryFromFont() {
   int scaledAdvanceWidth = baseWidth * FONT_MULTIPLIER;
   int scaledAdvanceHeight = baseHeight * FONT_MULTIPLIER;
 
-  termCellWidth = max(scaledAdvanceWidth, scaledGlyphWidth) + TERM_CELL_HPAD;
-  // Don't add TERM_CELL_VPAD to yAdvance - it already includes line spacing
-  termCellHeight = max(scaledAdvanceHeight, scaledGlyphHeight);
+  // For monospaced fonts, use xAdvance for cell width (glyphs may overlap slightly)
+  // Visual glyph width can be larger than xAdvance due to bitmap padding
+  termCellWidth = scaledAdvanceWidth + TERM_CELL_HPAD;
+  // For height, trust yAdvance as it includes proper line spacing
+  termCellHeight = scaledAdvanceHeight;
 
   #if USE_CUSTOM_FONT
   termCharOffsetX += TERM_CELL_HPAD / 2;
