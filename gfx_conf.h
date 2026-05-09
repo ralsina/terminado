@@ -8,6 +8,7 @@
 #include <lgfx/v1/panel/Panel_ILI9341.hpp>
 #include <lgfx/v1/panel/Panel_ST7789.hpp>
 #include <lgfx/v1/platforms/esp32/Bus_SPI.hpp>
+#include <lgfx/Fonts/GFXFF/TomThumb.h>
 #include <driver/i2c.h>
 
 /*******************************************************************************
