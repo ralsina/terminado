@@ -27,7 +27,6 @@ Description	:	VT100 terminal emulator with BBQ20 keyboard and serial communicati
 #include "iosevka_bold_10pt.h"
 #include "iosevka_italic_10pt.h"
 #include "iosevka_bolditalic_10pt.h"
-#include "picopixel.h"
 #include "config_menu.h"
 
 BBQ10Keyboard keyboard;
@@ -101,9 +100,9 @@ int termCharOffsetY = 1;
 
 // Returns the right GFXfont* for the current size index and attributes
 const GFXfont* getTermFont(int sizeIdx, bool bold, bool italic) {
-  // Picopixel (sizeIdx 0) has no bold/italic variants
+  // Tom Thumb (sizeIdx 0) is monospaced, has no bold/italic variants
   if (sizeIdx == 0) {
-    return &Picopixel;
+    return &TomThumb;
   }
 
   // Iosevka fonts (sizeIdx 1-2)

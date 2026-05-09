@@ -30,7 +30,7 @@ static const int BAUD_RATES[] = {
 };
 static const int BAUD_COUNT = sizeof(BAUD_RATES) / sizeof(BAUD_RATES[0]);
 static const char* PARITY_NAMES[] = { "None", "Even", "Odd" };
-static const int FONT_SIZES[] = { 0, 4, 6 };  // 0=Picopixel, 4=Iosevka 4pt, 6=Iosevka 6pt
+static const int FONT_SIZES[] = { 0, 4, 6 };  // 0=Tom Thumb, 4=Iosevka 4pt, 6=Iosevka 6pt
 static const int FONT_SIZE_COUNT = 3;
 
 // Default settings
@@ -40,7 +40,7 @@ static TermConfig termConfig = {
     .stopBits      = 1,
     .parityIndex   = 0,    // None
     .xonXoff       = true,
-    .fontSizeIndex = 0,    // Picopixel (tiny font for max columns)
+    .fontSizeIndex = 0,    // Tom Thumb (tiny monospaced font for max columns)
 };
 
 // ── Menu state ────────────────────────────────────────────────────────────────
@@ -98,7 +98,7 @@ static void menuDrawRow(int row, bool selected) {
     switch (row) {
         case 0:
             if (FONT_SIZES[termConfig.fontSizeIndex] == 0) {
-                tft.print("Picopixel");
+                tft.print("Tom Thumb");
             } else {
                 tft.print(FONT_SIZES[termConfig.fontSizeIndex]); tft.print("pt");
             }

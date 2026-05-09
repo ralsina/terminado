@@ -58,18 +58,18 @@
 #define TERM_DEFAULT_ROWS ((SCREEN_HEIGHT / TERM_DEFAULT_CELL_HEIGHT) - 1)
 
 // Maximum buffer size is based on the smallest supported cell dimensions.
-// Picopixel has xAdvance≈4, yAdvance=7; with HPAD=2: 6x7 per cell.
+// Tom Thumb has xAdvance=4, yAdvance=6; with HPAD=2: 6x6 per cell.
 // 4pt Iosevka has xAdvance≈4, yAdvance=10; with HPAD=2: 6x10 per cell.
 // 6pt Iosevka has xAdvance≈6, yAdvance=14; with HPAD=2: 8x14 per cell.
 #define TERM_MIN_CELL_WIDTH  6
-#define TERM_MIN_CELL_HEIGHT 7  // Picopixel yAdvance=7 (smallest)
+#define TERM_MIN_CELL_HEIGHT 6  // Tom Thumb yAdvance=6 (smallest)
 
-// Maximum size for Picopixel on 320x240 display:
+// Maximum size for Tom Thumb on 320x240 display:
 // Columns: 320/6 ≈ 53 chars
-// Rows: (240/7)-1 ≈ 33 chars (minus 1 for status bar)
+// Rows: (240/6)-1 = 39 chars (minus 1 for status bar)
 #define MAX_TERM_COLS 53
-#define MAX_TERM_ROWS 33
-#define MAX_TERM_BUFFER_SIZE (MAX_TERM_COLS * MAX_TERM_ROWS)  // 1749 chars max
+#define MAX_TERM_ROWS 39
+#define MAX_TERM_BUFFER_SIZE (MAX_TERM_COLS * MAX_TERM_ROWS)  // 2067 chars max
 
 #define TERM_OFFSET_X 0
 #define TERM_OFFSET_Y 0
