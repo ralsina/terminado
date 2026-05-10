@@ -184,3 +184,4 @@ This project builds upon:
 - **BBQ10Keyboard**: See library license
 - **Spleen font**: BSD 2-Clause License (see `LICENSE.spleen`)
 - **Font5x7FixedMono**: See font source for license information
+- **hl-vt100**: 2-Clause BSD License (see `LICENSE.vt100`)
