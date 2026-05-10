@@ -12,6 +12,7 @@ Description	:	VT100 terminal emulator with BBQ20 keyboard and serial communicati
 #include "term_config.h"
 #include "vt100.h"
 #include "font5x7.h"
+#include "spleen-5x8.h"
 // Iosevka fonts kept for other devices
 // #include "iosevka_regular_4pt.h"
 // #include "iosevka_bold_4pt.h"
@@ -114,17 +115,9 @@ const GFXfont* getTermFont(int sizeIdx, bool bold, bool italic) {
     return &Font5x7FixedMono;  // Always returns regular, bold will be "faked"
   }
 
-  // FreeMono9pt (sizeIdx 2) - supports real bold and italic variants!
+  // Spleen5x8 (sizeIdx 2) - no bold/italic variants
   if (sizeIdx == 2) {
-    if (bold && italic) {
-      return &FreeMonoBoldOblique9pt7b;
-    } else if (bold) {
-      return &FreeMonoBold9pt7b;
-    } else if (italic) {
-      return &FreeMonoOblique9pt7b;
-    } else {
-      return &FreeMono9pt7b;
-    }
+    return &spleen_5x8;  // Always returns regular, bold will be "faked"
   }
 
   // Iosevka fonts (sizeIdx 2-4) - kept for other devices, currently unused
@@ -177,9 +170,9 @@ void configureTerminalGeometryFromFont() {
     hPad = 0;
     vPad = 3;  // 7px tall + 3px padding = 10px cell height
   } else if (sizeIdx == 2) {
-    // FreeMono9pt - professional font, needs some padding
-    hPad = 1;
-    vPad = 2;  // Give it some breathing room
+    // Spleen 5x8 - excellent terminal font
+    hPad = 0;
+    vPad = 0;  // No padding needed
   } else {
     // Other fonts - default minimal padding
     hPad = 0;
@@ -340,7 +333,7 @@ void renderStatusBar() {
     // Use smaller font for status bar to ensure it fits
     tft.setFont(getTermFont(termConfig.fontSizeIndex, false, false));
     tft.setTextSize(1);
-    tft.setCursor(2, py + 2); // Small offset from top of status bar
+    tft.setCursor(2, py + 1); // Reduced offset for better vertical positioning
     tft.setTextColor(TFT_WHITE, TFT_BLUE);
 
     // Truncate text if it's too long
