@@ -144,11 +144,7 @@ sudo systemctl enable --now getty@ttyUSB0.service
 
 ### Key Bindings
 
-| Key | Action |
-|-----|--------|
-| Fn + ESC | Open/close config menu |
-| Fn + W/A/S/D | Arrow keys (Up/Left/Down/Right) |
-| Ctrl + key | Send control character |
+See [KEYBOARD.md](KEYBOARD.md) for complete keyboard mapping documentation.
 
 ## Troubleshooting
 
