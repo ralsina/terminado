@@ -30,8 +30,8 @@ static const int BAUD_RATES[] = {
 };
 static const int BAUD_COUNT = sizeof(BAUD_RATES) / sizeof(BAUD_RATES[0]);
 static const char* PARITY_NAMES[] = { "None", "Even", "Odd" };
-static const int FONT_SIZES[] = { 0, 5, -1, 9 };  // 0=Tom Thumb, 5=Font5x7FixedMono, -1=Font0, 9=FreeMono9pt
-static const int FONT_SIZE_COUNT = 4;
+static const int FONT_SIZES[] = { 0, 5, 9 };  // 0=Tom Thumb, 5=Font5x7FixedMono, 9=FreeMono9pt
+static const int FONT_SIZE_COUNT = 3;
 
 // Default settings
 static TermConfig termConfig = {
@@ -40,7 +40,7 @@ static TermConfig termConfig = {
     .stopBits      = 1,
     .parityIndex   = 0,    // None
     .xonXoff       = true,
-    .fontSizeIndex = 3,    // FreeMono9pt (professional monospace font)
+    .fontSizeIndex = 2,    // FreeMono9pt (professional monospace font)
 };
 
 // ── Menu state ────────────────────────────────────────────────────────────────
@@ -101,8 +101,6 @@ static void menuDrawRow(int row, bool selected) {
                 tft.print("Tom Thumb");
             } else if (FONT_SIZES[termConfig.fontSizeIndex] == 5) {
                 tft.print("5x7 Mono");
-            } else if (FONT_SIZES[termConfig.fontSizeIndex] == -1) {
-                tft.print("Font0");
             } else if (FONT_SIZES[termConfig.fontSizeIndex] == 9) {
                 tft.print("FreeMono9");
             } else {

@@ -104,11 +104,6 @@ int termCellVPad = TERM_CELL_VPAD;
 
 // Returns the right GFXfont* for the current size index and attributes
 const GFXfont* getTermFont(int sizeIdx, bool bold, bool italic) {
-  // Font0 (sizeIdx -1) - built-in font (no variants)
-  if (sizeIdx == -1) {
-    return reinterpret_cast<const GFXfont*>(&fonts::Font0);
-  }
-
   // Tom Thumb (sizeIdx 0) - no bold/italic variants
   if (sizeIdx == 0) {
     return &TomThumb;  // Always returns regular, bold will be "faked" with brighter colors
@@ -173,11 +168,7 @@ void configureTerminalGeometryFromFont() {
 
   // Set padding based on font type
   int sizeIdx = termConfig.fontSizeIndex;
-  if (sizeIdx == -1) {
-    // Font0 - has built-in padding
-    hPad = 0;
-    vPad = 0;
-  } else if (sizeIdx == 0) {
+  if (sizeIdx == 0) {
     // Tom Thumb - very compact, minimal padding
     hPad = 0;
     vPad = 0;
