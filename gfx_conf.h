@@ -9,6 +9,10 @@
 #include <lgfx/v1/panel/Panel_ST7789.hpp>
 #include <lgfx/v1/platforms/esp32/Bus_SPI.hpp>
 #include <lgfx/Fonts/GFXFF/TomThumb.h>
+#include <lgfx/Fonts/GFXFF/FreeMono9pt7b.h>
+#include <lgfx/Fonts/GFXFF/FreeMonoBold9pt7b.h>
+#include <lgfx/Fonts/GFXFF/FreeMonoOblique9pt7b.h>
+#include <lgfx/Fonts/GFXFF/FreeMonoBoldOblique9pt7b.h>
 #include <driver/i2c.h>
 
 /*******************************************************************************

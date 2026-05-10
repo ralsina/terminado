@@ -11,22 +11,24 @@ Description	:	VT100 terminal emulator with BBQ20 keyboard and serial communicati
 #include <BBQ10Keyboard.h>
 #include "term_config.h"
 #include "vt100.h"
-#include "iosevka_regular_4pt.h"
-#include "iosevka_bold_4pt.h"
-#include "iosevka_italic_4pt.h"
-#include "iosevka_bolditalic_4pt.h"
-#include "iosevka_regular_6pt.h"
-#include "iosevka_bold_6pt.h"
-#include "iosevka_italic_6pt.h"
-#include "iosevka_bolditalic_6pt.h"
-#include "iosevka_regular_7pt.h"
-#include "iosevka_bold_7pt.h"
-#include "iosevka_italic_7pt.h"
-#include "iosevka_bolditalic_7pt.h"
-#include "iosevka_regular_10pt.h"
-#include "iosevka_bold_10pt.h"
-#include "iosevka_italic_10pt.h"
-#include "iosevka_bolditalic_10pt.h"
+#include "font5x7.h"
+// Iosevka fonts kept for other devices
+// #include "iosevka_regular_4pt.h"
+// #include "iosevka_bold_4pt.h"
+// #include "iosevka_italic_4pt.h"
+// #include "iosevka_bolditalic_4pt.h"
+// #include "iosevka_regular_6pt.h"
+// #include "iosevka_bold_6pt.h"
+// #include "iosevka_italic_6pt.h"
+// #include "iosevka_bolditalic_6pt.h"
+// #include "iosevka_regular_7pt.h"
+// #include "iosevka_bold_7pt.h"
+// #include "iosevka_italic_7pt.h"
+// #include "iosevka_bolditalic_7pt.h"
+// #include "iosevka_regular_10pt.h"
+// #include "iosevka_bold_10pt.h"
+// #include "iosevka_italic_10pt.h"
+// #include "iosevka_bolditalic_10pt.h"
 #include "config_menu.h"
 
 BBQ10Keyboard keyboard;
@@ -97,26 +99,60 @@ uint16_t termFontFirst = 0x20;
 uint16_t termFontLast = 0x7E;
 int termCharOffsetX = 0;
 int termCharOffsetY = 1;
+int termCellHPad = TERM_CELL_HPAD;
+int termCellVPad = TERM_CELL_VPAD;
 
 // Returns the right GFXfont* for the current size index and attributes
 const GFXfont* getTermFont(int sizeIdx, bool bold, bool italic) {
-  // Tom Thumb (sizeIdx 0) is monospaced, has no bold/italic variants
-  if (sizeIdx == 0) {
-    return &TomThumb;
+  // Font0 (sizeIdx -1) - built-in font (no variants)
+  if (sizeIdx == -1) {
+    return reinterpret_cast<const GFXfont*>(&fonts::Font0);
   }
 
-  // Iosevka fonts (sizeIdx 1-2)
-  static const GFXfont* IosevkaFonts[2][4] = {
-    // sizeIdx 1 = 4pt
+  // Tom Thumb (sizeIdx 0) - no bold/italic variants
+  if (sizeIdx == 0) {
+    return &TomThumb;  // Always returns regular, bold will be "faked" with brighter colors
+  }
+
+  // Font5x7FixedMono (sizeIdx 1) - no bold/italic variants
+  if (sizeIdx == 1) {
+    return &Font5x7FixedMono;  // Always returns regular, bold will be "faked"
+  }
+
+  // FreeMono9pt (sizeIdx 2) - supports real bold and italic variants!
+  if (sizeIdx == 2) {
+    if (bold && italic) {
+      return &FreeMonoBoldOblique9pt7b;
+    } else if (bold) {
+      return &FreeMonoBold9pt7b;
+    } else if (italic) {
+      return &FreeMonoOblique9pt7b;
+    } else {
+      return &FreeMono9pt7b;
+    }
+  }
+
+  // Iosevka fonts (sizeIdx 2-4) - kept for other devices, currently unused
+  // To re-enable, uncomment includes and update this function
+  /*
+  static const GFXfont* IosevkaFonts[3][4] = {
+    // sizeIdx 2 = 4pt
     { &IosevkaNerdFontMono_Regular4pt8b, &IosevkaNerdFontMono_Bold4pt8b,
       &IosevkaNerdFontMono_Italic4pt8b,  &IosevkaNerdFontMono_BoldItalic4pt8b },
-    // sizeIdx 2 = 6pt
+    // sizeIdx 3 = 6pt
     { &IosevkaNerdFontMono_Regular6pt8b, &IosevkaNerdFontMono_Bold6pt8b,
       &IosevkaNerdFontMono_Italic6pt8b,  &IosevkaNerdFontMono_BoldItalic6pt8b },
+    // sizeIdx 4 = 7pt
+    { &IosevkaNerdFontMono_Regular7pt8b, &IosevkaNerdFontMono_Bold7pt8b,
+      &IosevkaNerdFontMono_Italic7pt8b,  &IosevkaNerdFontMono_BoldItalic7pt8b },
   };
-  int si = constrain(sizeIdx - 1, 0, 1);  // Map 1-2 to 0-1
+  int si = constrain(sizeIdx - 2, 0, 2);  // Map 2-4 to 0-2
   int vi = (bold && italic) ? 3 : bold ? 1 : italic ? 2 : 0;
   return IosevkaFonts[si][vi];
+  */
+
+  // Fallback to Tom Thumb if sizeIdx is out of range
+  return &TomThumb;
 }
 
 void configureTerminalGeometryFromFont() {
@@ -127,9 +163,40 @@ void configureTerminalGeometryFromFont() {
   int glyphVisualWidth = baseWidth;
   int glyphVisualHeight = baseHeight;
 
+  // Set per-font padding based on font characteristics
+  int hPad = 0;
+  int vPad = 0;
+
   #if USE_CUSTOM_FONT
   const GFXfont* selectedFont = getTermFont(termConfig.fontSizeIndex, false, false);
   tft.setFont(selectedFont);
+
+  // Set padding based on font type
+  int sizeIdx = termConfig.fontSizeIndex;
+  if (sizeIdx == -1) {
+    // Font0 - has built-in padding
+    hPad = 0;
+    vPad = 0;
+  } else if (sizeIdx == 0) {
+    // Tom Thumb - very compact, minimal padding
+    hPad = 0;
+    vPad = 0;
+  } else if (sizeIdx == 1) {
+    // 5x7 Fixed Mono - needs vertical padding
+    hPad = 0;
+    vPad = 3;  // 7px tall + 3px padding = 10px cell height
+  } else if (sizeIdx == 2) {
+    // FreeMono9pt - professional font, needs some padding
+    hPad = 1;
+    vPad = 2;  // Give it some breathing room
+  } else {
+    // Other fonts - default minimal padding
+    hPad = 0;
+    vPad = 1;
+  }
+
+  termCellHPad = hPad;
+  termCellVPad = vPad;
 
   uint16_t metricFirst = max(static_cast<uint16_t>(selectedFont->first), static_cast<uint16_t>(0x20));
   uint16_t metricLast = min(static_cast<uint16_t>(selectedFont->last), static_cast<uint16_t>(0x7E));
@@ -191,7 +258,7 @@ void configureTerminalGeometryFromFont() {
     // glyphVisualHeight = max(static_cast<int>(baseHeight), maxAscent + maxDescent);
     glyphVisualHeight = baseHeight; // Use yAdvance as the height
     termCharOffsetX = max(0, -minX) * FONT_MULTIPLIER;
-    termCharOffsetY = TERM_CELL_VPAD / 2;
+    termCharOffsetY = termCellVPad / 2;
   }
   #else
   tft.setFont(&fonts::Font0);
@@ -208,12 +275,12 @@ void configureTerminalGeometryFromFont() {
 
   // For monospaced fonts, use xAdvance for cell width (glyphs may overlap slightly)
   // Visual glyph width can be larger than xAdvance due to bitmap padding
-  termCellWidth = scaledAdvanceWidth + TERM_CELL_HPAD;
+  termCellWidth = scaledAdvanceWidth + termCellHPad;
   // For height, trust yAdvance as it includes proper line spacing
-  termCellHeight = scaledAdvanceHeight;
+  termCellHeight = scaledAdvanceHeight + termCellVPad;
 
   #if USE_CUSTOM_FONT
-  termCharOffsetX += TERM_CELL_HPAD / 2;
+  termCharOffsetX += termCellHPad / 2;
   #else
   termCharOffsetX = TERM_CELL_HPAD / 2;
   termCharOffsetY = 1;

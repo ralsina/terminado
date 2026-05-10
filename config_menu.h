@@ -30,8 +30,8 @@ static const int BAUD_RATES[] = {
 };
 static const int BAUD_COUNT = sizeof(BAUD_RATES) / sizeof(BAUD_RATES[0]);
 static const char* PARITY_NAMES[] = { "None", "Even", "Odd" };
-static const int FONT_SIZES[] = { 0, 4, 6 };  // 0=Tom Thumb, 4=Iosevka 4pt, 6=Iosevka 6pt
-static const int FONT_SIZE_COUNT = 3;
+static const int FONT_SIZES[] = { 0, 5, -1, 9 };  // 0=Tom Thumb, 5=Font5x7FixedMono, -1=Font0, 9=FreeMono9pt
+static const int FONT_SIZE_COUNT = 4;
 
 // Default settings
 static TermConfig termConfig = {
@@ -40,7 +40,7 @@ static TermConfig termConfig = {
     .stopBits      = 1,
     .parityIndex   = 0,    // None
     .xonXoff       = true,
-    .fontSizeIndex = 0,    // Tom Thumb (tiny monospaced font for max columns)
+    .fontSizeIndex = 3,    // FreeMono9pt (professional monospace font)
 };
 
 // ── Menu state ────────────────────────────────────────────────────────────────
@@ -51,15 +51,15 @@ static int  menuSelectedRow = 0;
 // ── Layout constants ─────────────────────────────────────────────────────────
 // Navigation: plain W/A/S/D (no Fn needed)
 
-static const int MENU_W       = 360;
-static const int MENU_H       = 260;
+static const int MENU_W       = 200;  // More compact width
+static const int MENU_H       = 180;  // More compact height
 static const int MENU_X       = (SCREEN_WIDTH  - MENU_W) / 2;
 static const int MENU_Y       = (SCREEN_HEIGHT - MENU_H) / 2;
 static const int MENU_ROWS    = 6;   // number of setting rows
-static const int ROW_H        = 30;
-static const int LABEL_X      = MENU_X + 12;
-static const int VALUE_X      = MENU_X + 200;
-static const int FIRST_ROW_Y  = MENU_Y + 52;
+static const int ROW_H        = 20;  // Smaller row height
+static const int LABEL_X      = MENU_X + 8;   // Tighter padding
+static const int VALUE_X      = MENU_X + 100; // Move value closer to label
+static const int FIRST_ROW_Y  = MENU_Y + 35;  // Compact title area
 
 static const uint32_t COL_BG       = 0x1A1A2E;
 static const uint32_t COL_TITLE_BG = 0x16213E;
@@ -75,16 +75,16 @@ static void menuDrawRow(int row, bool selected) {
     int ry = FIRST_ROW_Y + row * ROW_H;
     uint32_t bg = selected ? COL_SEL_BG : COL_BG;
 
-    tft.fillRect(MENU_X + 2, ry, MENU_W - 4, ROW_H - 2, bg);
+    tft.fillRect(MENU_X + 1, ry, MENU_W - 2, ROW_H - 1, bg);
 
     tft.setTextColor(COL_TEXT, bg);
-    tft.setCursor(LABEL_X, ry + 8);
+    tft.setCursor(LABEL_X, ry + 6);  // Adjust cursor for smaller row height
     tft.setFont(nullptr);
     tft.setTextSize(1);
 
     // Label
     switch (row) {
-        case 0: tft.print("Font Size");   break;
+        case 0: tft.print("Font");   break;
         case 1: tft.print("Baud Rate");   break;
         case 2: tft.print("Data Bits");   break;
         case 3: tft.print("Stop Bits");   break;
@@ -94,11 +94,17 @@ static void menuDrawRow(int row, bool selected) {
 
     // Value
     tft.setTextColor(COL_VALUE, bg);
-    tft.setCursor(VALUE_X, ry + 8);
+    tft.setCursor(VALUE_X, ry + 6);  // Adjust cursor for smaller row height
     switch (row) {
         case 0:
             if (FONT_SIZES[termConfig.fontSizeIndex] == 0) {
                 tft.print("Tom Thumb");
+            } else if (FONT_SIZES[termConfig.fontSizeIndex] == 5) {
+                tft.print("5x7 Mono");
+            } else if (FONT_SIZES[termConfig.fontSizeIndex] == -1) {
+                tft.print("Font0");
+            } else if (FONT_SIZES[termConfig.fontSizeIndex] == 9) {
+                tft.print("FreeMono9");
             } else {
                 tft.print(FONT_SIZES[termConfig.fontSizeIndex]); tft.print("pt");
             }
@@ -113,7 +119,7 @@ static void menuDrawRow(int row, bool selected) {
     // Arrow hints on selected row
     if (selected) {
         tft.setTextColor(COL_HINT, bg);
-        tft.setCursor(MENU_X + MENU_W - 30, ry + 8);
+        tft.setCursor(MENU_X + MENU_W - 25, ry + 6);  // Tighter spacing
         tft.print("< >");
     }
 }
@@ -124,15 +130,15 @@ static void menuDraw() {
     tft.fillRect(MENU_X, MENU_Y, MENU_W, MENU_H, COL_BG);
 
     // Title bar
-    tft.fillRect(MENU_X, MENU_Y, MENU_W, 40, COL_TITLE_BG);
+    tft.fillRect(MENU_X, MENU_Y, MENU_W, 28, COL_TITLE_BG);  // Smaller title bar
     tft.setFont(nullptr);
     tft.setTextSize(1);
     tft.setTextColor(COL_TEXT, COL_TITLE_BG);
-    tft.setCursor(MENU_X + 12, MENU_Y + 14);
-    tft.print("Terminal Settings");
+    tft.setCursor(MENU_X + 8, MENU_Y + 10);  // Tighter spacing
+    tft.print("Settings");  // Shorter title
 
     // Divider
-    tft.drawFastHLine(MENU_X, MENU_Y + 40, MENU_W, COL_BORDER);
+    tft.drawFastHLine(MENU_X, MENU_Y + 28, MENU_W, COL_BORDER);
 
     // Rows
     for (int i = 0; i < MENU_ROWS; i++) {
@@ -140,11 +146,11 @@ static void menuDraw() {
     }
 
     // Bottom hint
-    int hintY = MENU_Y + MENU_H - 18;
-    tft.fillRect(MENU_X, hintY, MENU_W, 18, COL_TITLE_BG);
+    int hintY = MENU_Y + MENU_H - 16;
+    tft.fillRect(MENU_X, hintY, MENU_W, 16, COL_TITLE_BG);  // Slightly larger hint area
     tft.setTextColor(COL_HINT, COL_TITLE_BG);
-    tft.setCursor(MENU_X + 8, hintY + 4);
-    tft.print("W/S: select  A/D: change  ESC: apply & close");
+    tft.setCursor(MENU_X + 4, hintY + 4);
+    tft.print("W/S:nav A/D:chg ESC:ok");  // Clearer compact hint
 }
 
 // Apply the current settings to the serial port and persist to NVS

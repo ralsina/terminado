@@ -38,10 +38,9 @@
 #define FONT_MULTIPLIER 1
 
 #if USE_CUSTOM_FONT
-// Padding used around glyphs in each terminal cell.
-// Tom Thumb is very compact, so use minimal padding for maximum columns
-#define TERM_CELL_HPAD 0  // No horizontal padding needed for Tom Thumb (xAdvance=3-4)
-#define TERM_CELL_VPAD 0  // No vertical padding needed (yAdvance=6 includes spacing)
+// Default padding - will be overridden per-font in configureTerminalGeometryFromFont()
+#define TERM_CELL_HPAD 0
+#define TERM_CELL_VPAD 0
 #else
 #define TERM_CELL_HPAD 1
 #define TERM_CELL_VPAD 2
@@ -59,8 +58,7 @@
 
 // Maximum buffer size is based on the smallest supported cell dimensions.
 // Tom Thumb: max xAdvance=4, yAdvance=6; no padding: 4x6 per cell.
-// 4pt Iosevka: max xAdvance≈4, yAdvance=10; no padding: 4x10 per cell.
-// 6pt Iosevka: max xAdvance≈6, yAdvance=14; no padding: 6x14 per cell.
+// Monogram: xAdvance=6, yAdvance=9; no padding: 6x9 per cell.
 #define TERM_MIN_CELL_WIDTH  4  // Tom Thumb max xAdvance=4
 #define TERM_MIN_CELL_HEIGHT 6  // Tom Thumb yAdvance=6 (smallest)
 
