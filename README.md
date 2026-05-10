@@ -182,4 +182,5 @@ sudo systemctl status getty@ttyUSB0.service
 This project builds upon:
 - **LovyanGFX**: See library license
 - **BBQ10Keyboard**: See library license
-- **Iosevka Nerd Font**: SIL Open Font License
+- **Spleen font**: BSD 2-Clause License (see `LICENSE.spleen`)
+- **Font5x7FixedMono**: See font source for license information

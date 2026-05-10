@@ -30,8 +30,8 @@ static const int BAUD_RATES[] = {
 };
 static const int BAUD_COUNT = sizeof(BAUD_RATES) / sizeof(BAUD_RATES[0]);
 static const char* PARITY_NAMES[] = { "None", "Even", "Odd" };
-static const int FONT_SIZES[] = { 0, 5, 8 };  // 0=Tom Thumb, 5=Font5x7FixedMono, 8=Spleen5x8
-static const int FONT_SIZE_COUNT = 3;
+static const int FONT_SIZES[] = { 0, 8, 12, 5 };  // 0=Tom Thumb, 8=Spleen5x8, 12=Spleen6x12, 5=Font5x7FixedMono
+static const int FONT_SIZE_COUNT = 4;
 
 // Default settings
 static TermConfig termConfig = {
@@ -40,7 +40,7 @@ static TermConfig termConfig = {
     .stopBits      = 1,
     .parityIndex   = 0,    // None
     .xonXoff       = true,
-    .fontSizeIndex = 1,    // 5x7 Mono (readable compact font)
+    .fontSizeIndex = 1,    // Spleen (excellent terminal font)
 };
 
 // ── Menu state ────────────────────────────────────────────────────────────────
@@ -98,11 +98,13 @@ static void menuDrawRow(int row, bool selected) {
     switch (row) {
         case 0:
             if (FONT_SIZES[termConfig.fontSizeIndex] == 0) {
-                tft.print("Tom Thumb");
-            } else if (FONT_SIZES[termConfig.fontSizeIndex] == 5) {
-                tft.print("5x7 Mono");
+                tft.print("TomThumb");
             } else if (FONT_SIZES[termConfig.fontSizeIndex] == 8) {
-                tft.print("Spleen 5x8");
+                tft.print("Spleen");
+            } else if (FONT_SIZES[termConfig.fontSizeIndex] == 12) {
+                tft.print("Spleen6x12");
+            } else if (FONT_SIZES[termConfig.fontSizeIndex] == 5) {
+                tft.print("5x7 mono");
             } else {
                 tft.print(FONT_SIZES[termConfig.fontSizeIndex]); tft.print("pt");
             }
@@ -148,7 +150,7 @@ static void menuDraw() {
     tft.fillRect(MENU_X, hintY, MENU_W, 16, COL_TITLE_BG);  // Slightly larger hint area
     tft.setTextColor(COL_HINT, COL_TITLE_BG);
     tft.setCursor(MENU_X + 4, hintY + 4);
-    tft.print("W/S:nav A/D:chg ESC:ok");  // Clearer compact hint
+    tft.print("W/S:nav A/D:chg ENT:ok");  // Updated to show ENTER saves
 }
 
 // Apply the current settings to the serial port and persist to NVS
@@ -218,8 +220,8 @@ static void configMenuOpen() {
 static bool configMenuHandleKey(char c, bool fnKey) {
     if (!menuActive) return false;
 
-    if (c == 5 /* ESC */) {
-        // ESC: apply and close
+    if (c == 5 /* ESC */ || c == '\n' /* ENTER */) {
+        // ESC or ENTER: apply and close
         menuApplySettings();
         menuActive = false;
         // Force full terminal redraw

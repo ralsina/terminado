@@ -13,6 +13,7 @@ Description	:	VT100 terminal emulator with BBQ20 keyboard and serial communicati
 #include "vt100.h"
 #include "font5x7.h"
 #include "spleen-5x8.h"
+#include "spleen-6x12.h"
 // Iosevka fonts kept for other devices
 // #include "iosevka_regular_4pt.h"
 // #include "iosevka_bold_4pt.h"
@@ -110,14 +111,19 @@ const GFXfont* getTermFont(int sizeIdx, bool bold, bool italic) {
     return &TomThumb;  // Always returns regular, bold will be "faked" with brighter colors
   }
 
-  // Font5x7FixedMono (sizeIdx 1) - no bold/italic variants
+  // Spleen5x8 (sizeIdx 1) - no bold/italic variants
   if (sizeIdx == 1) {
-    return &Font5x7FixedMono;  // Always returns regular, bold will be "faked"
+    return &spleen_5x8;  // Always returns regular, bold will be "faked"
   }
 
-  // Spleen5x8 (sizeIdx 2) - no bold/italic variants
+  // Spleen6x12 (sizeIdx 2) - no bold/italic variants
   if (sizeIdx == 2) {
-    return &spleen_5x8;  // Always returns regular, bold will be "faked"
+    return &spleen_6x12;  // Always returns regular, bold will be "faked"
+  }
+
+  // Font5x7FixedMono (sizeIdx 3) - no bold/italic variants
+  if (sizeIdx == 3) {
+    return &Font5x7FixedMono;  // Always returns regular, bold will be "faked"
   }
 
   // Iosevka fonts (sizeIdx 2-4) - kept for other devices, currently unused
@@ -166,13 +172,17 @@ void configureTerminalGeometryFromFont() {
     hPad = 0;
     vPad = 0;
   } else if (sizeIdx == 1) {
-    // 5x7 Fixed Mono - needs vertical padding
-    hPad = 0;
-    vPad = 3;  // 7px tall + 3px padding = 10px cell height
-  } else if (sizeIdx == 2) {
     // Spleen 5x8 - excellent terminal font
     hPad = 0;
     vPad = 0;  // No padding needed
+  } else if (sizeIdx == 2) {
+    // Spleen 6x12 - larger terminal font
+    hPad = 0;
+    vPad = 0;  // No padding needed
+  } else if (sizeIdx == 3) {
+    // 5x7 Fixed Mono - needs vertical padding
+    hPad = 0;
+    vPad = 3;  // 7px tall + 3px padding = 10px cell height
   } else {
     // Other fonts - default minimal padding
     hPad = 0;
@@ -309,7 +319,30 @@ void renderStatusBar() {
   if (millis() - debugMessageTime < DEBUG_MESSAGE_DURATION && debugMessage.length() > 0) {
     currentContent = "DEBUG: " + debugMessage;
   } else {
-    currentContent = terminalTitle + " | " + String(configMenuGetBaud()) + " baud";
+    // Build comprehensive status bar info
+    String fontName;
+    int fontSize = FONT_SIZES[termConfig.fontSizeIndex];
+    if (fontSize == 0) fontName = "TomThumb";
+    else if (fontSize == 8) fontName = "Spleen";
+    else if (fontSize == 12) fontName = "Spleen6x12";
+    else if (fontSize == 5) fontName = "5x7";
+    else fontName = String(fontSize) + "pt";
+
+    // Build traditional serial settings string (e.g., "19200N1")
+    String parityChar;
+    switch (termConfig.parityIndex) {
+      case 0: parityChar = "N"; break;  // None
+      case 1: parityChar = "E"; break;  // Even
+      case 2: parityChar = "O"; break;  // Odd
+      default: parityChar = "N"; break;
+    }
+
+    String serialSettings = String(configMenuGetBaud()) + parityChar +
+                           String(termConfig.dataBits) +
+                           String(termConfig.stopBits);
+
+    currentContent = terminalTitle + " | " + String(vt100.cols()) + "x" + String(vt100.rows()) +
+                     " | " + fontName + " | " + serialSettings;
   }
 
   // Only redraw if content changed
@@ -336,9 +369,11 @@ void renderStatusBar() {
     tft.setCursor(2, py + 1); // Reduced offset for better vertical positioning
     tft.setTextColor(TFT_WHITE, TFT_BLUE);
 
-    // Truncate text if it's too long
-    if (currentContent.length() > 40) {
-      currentContent = currentContent.substring(0, 37) + "...";
+    // Truncate text to fit exactly in terminal width
+    // Use actual terminal width to determine max characters
+    int statusMaxChars = vt100.cols() - 2;  // Leave small margin
+    if (currentContent.length() > statusMaxChars) {
+      currentContent = currentContent.substring(0, statusMaxChars - 3) + "...";
     }
     tft.print(currentContent);
   }
