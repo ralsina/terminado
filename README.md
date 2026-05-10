@@ -179,6 +179,8 @@ sudo systemctl status getty@ttyUSB0.service
 
 ## License
 
+**Terminado** - MIT License (see `LICENSE`)
+
 This project builds upon:
 - **LovyanGFX**: See library license
 - **BBQ10Keyboard**: See library license
