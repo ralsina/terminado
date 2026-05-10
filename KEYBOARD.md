@@ -7,6 +7,8 @@ Terminado uses the BBQ10Keyboard with special key mappings optimized for VT100 t
 The BBQ10Keyboard has the following special keys:
 - **BACK key** → Functions as **Fn** (modifier)
 - **SYMBOL key** → Functions as **Ctrl** (modifier)
+- **CALL key** → Functions as **Alt** (modifier)
+- **BlackBerry key** → Functions as **Fn2** (modifier for function keys)
 
 ## Key Mappings
 
@@ -22,11 +24,11 @@ The BBQ10Keyboard has the following special keys:
 | Combination | Action |
 |-------------|--------|
 | Fn + ESC | Open/close configuration menu |
-| Fn + W | Arrow Up |
-| Fn + A | Arrow Left |
-| Fn + S | Arrow Down |
-| Fn + D | Arrow Right |
+| Fn + Q | TAB key |
+| Fn + W/A/S/D | Arrow keys (Up/Left/Down/Right) |
+| Fn2 + Q/W/E/R/T/Y/U/I/O/P | F1-F10 function keys |
 | Ctrl + Letter | Control characters (Ctrl+C, Ctrl+D, etc.) |
+| Alt + Letter | Alt key combinations (ESC + character) |
 
 ### Standard Keys
 

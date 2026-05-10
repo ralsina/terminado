@@ -37,8 +37,10 @@ BBQ10Keyboard keyboard;
 VT100 vt100;  // Re-enabled with reduced memory footprint
 
 // Modifier key states
-bool fnKeyPressed = false;
-bool ctrlKeyPressed = false;
+bool fnKeyPressed = false;    // BACK key (Fn)
+bool fn2KeyPressed = false;   // BlackBerry key (Fn2)
+bool ctrlKeyPressed = false;  // SYMBOL key (Ctrl)
+bool altKeyPressed = false;   // CALL key (Alt)
 
 // Status bar state
 String terminalTitle = "VT100 Terminal";
@@ -505,6 +507,26 @@ void handleKeyPress(const BBQ10Keyboard::KeyEvent &key) {
     return;
   }
 
+  // Handle CALL key (Alt) - ASCII 19
+  if (c == 19) {
+    if (key.state == BBQ10Keyboard::StatePress) {
+      altKeyPressed = true;
+    } else if (key.state == BBQ10Keyboard::StateRelease) {
+      altKeyPressed = false;
+    }
+    return;
+  }
+
+  // Handle BlackBerry key (Fn2) - ASCII 20
+  if (c == 20) {
+    if (key.state == BBQ10Keyboard::StatePress) {
+      fn2KeyPressed = true;
+    } else if (key.state == BBQ10Keyboard::StateRelease) {
+      fn2KeyPressed = false;
+    }
+    return;
+  }
+
   // Handle key release - stop autorepeat
   if (key.state == BBQ10Keyboard::StateRelease) {
     if (c == lastRepeatedKey) {
@@ -561,8 +583,32 @@ void processKeyCharacter(char c) {
   }
 
   // Special key mappings for BBQ20 keyboard
-  // 5 = escape, 6 = left, 17 = down, 18 = control, 7 = Fn
+  // 5 = escape, 6 = left, 17 = down, 18 = control, 7 = Fn, 19 = CALL(Alt), 20 = BlackBerry(GUI)
   switch (c) {
+    case 'q':
+    case 'Q':
+      if (fnKeyPressed) {
+        Serial.write('\t');  // Fn+Q = TAB
+        return;
+      }
+      if (fn2KeyPressed) {
+        Serial.write("\033OP");  // Fn2+Q = F1
+        return;
+      }
+      // Check for modifiers before sending normal character
+      if (ctrlKeyPressed) {
+        Serial.write('q' & 0x1F);  // Ctrl+Q
+        return;
+      }
+      if (altKeyPressed) {
+        // Alt+Q - could send escape sequence for Meta+Q if needed
+        Serial.write('\e');  // ESC prefix for Alt combinations
+        Serial.write('q');
+        return;
+      }
+      Serial.write('q');
+      break;
+
     case 5:    // Escape key — Fn+ESC opens config menu
       if (fnKeyPressed) {
         configMenuOpen();
@@ -582,7 +628,12 @@ void processKeyCharacter(char c) {
         Serial.write(c & 0x1F);  // Ctrl+W
         return;
       }
-      Serial.write('w');  // Send normal 'w' when Fn not pressed
+      if (altKeyPressed) {
+        Serial.write('\e');  // ESC prefix for Alt combinations
+        Serial.write(c);
+        return;
+      }
+      Serial.write('w');  // Send normal 'w' when no modifiers
       break;
 
     case 'a':
@@ -596,7 +647,12 @@ void processKeyCharacter(char c) {
         Serial.write(c & 0x1F);  // Ctrl+A
         return;
       }
-      Serial.write('a');  // Send normal 'a' when Fn not pressed
+      if (altKeyPressed) {
+        Serial.write('\e');  // ESC prefix for Alt combinations
+        Serial.write(c);
+        return;
+      }
+      Serial.write('a');  // Send normal 'a' when no modifiers
       break;
 
     case 's':
@@ -610,7 +666,12 @@ void processKeyCharacter(char c) {
         Serial.write(c & 0x1F);  // Ctrl+S
         return;
       }
-      Serial.write('s');  // Send normal 's' when Fn not pressed
+      if (altKeyPressed) {
+        Serial.write('\e');  // ESC prefix for Alt combinations
+        Serial.write(c);
+        return;
+      }
+      Serial.write('s');  // Send normal 's' when no modifiers
       break;
 
     case 'd':
@@ -624,7 +685,12 @@ void processKeyCharacter(char c) {
         Serial.write(c & 0x1F);  // Ctrl+D
         return;
       }
-      Serial.write('d');  // Send normal 'd' when Fn not pressed
+      if (altKeyPressed) {
+        Serial.write('\e');  // ESC prefix for Alt combinations
+        Serial.write(c);
+        return;
+      }
+      Serial.write('d');  // Send normal 'd' when no modifiers
       break;
 
     case '\n':  // Enter key
