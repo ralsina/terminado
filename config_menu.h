@@ -45,8 +45,12 @@ static TermConfig termConfig = {
 
 // ── Menu state ────────────────────────────────────────────────────────────────
 
+enum MenuLevel { MENU_TOP, MENU_CATEGORY };
+
 static bool menuActive = false;
-static int  menuSelectedRow = 0;
+static enum MenuLevel currentMenuLevel = MENU_TOP;
+static int  selectedCategory = 0;   // 0=Display, 1=Serial
+static int  selectedSetting = 0;    // Setting within current category
 
 // ── Layout constants ─────────────────────────────────────────────────────────
 // Navigation: plain W/A/S/D (no Fn needed)
@@ -55,11 +59,15 @@ static const int MENU_W       = 200;  // More compact width
 static const int MENU_H       = 180;  // More compact height
 static const int MENU_X       = (SCREEN_WIDTH  - MENU_W) / 2;
 static const int MENU_Y       = (SCREEN_HEIGHT - MENU_H) / 2;
-static const int MENU_ROWS    = 6;   // number of setting rows
 static const int ROW_H        = 20;  // Smaller row height
 static const int LABEL_X      = MENU_X + 8;   // Tighter padding
 static const int VALUE_X      = MENU_X + 100; // Move value closer to label
 static const int FIRST_ROW_Y  = MENU_Y + 35;  // Compact title area
+
+// Category definitions
+static const int CATEGORY_COUNT = 2;
+static const char* CATEGORY_NAMES[] = {"Display", "Serial"};
+static const int CATEGORY_SETTINGS_COUNT[] = {1, 5}; // Display has 1, Serial has 5
 
 static const uint32_t COL_BG       = 0x1A1A2E;
 static const uint32_t COL_TITLE_BG = 0x16213E;
@@ -71,20 +79,50 @@ static const uint32_t COL_HINT     = 0x888888;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-static void menuDrawRow(int row, bool selected) {
+// Draw a main menu category row
+static void menuDrawCategoryRow(int row, bool selected) {
     int ry = FIRST_ROW_Y + row * ROW_H;
     uint32_t bg = selected ? COL_SEL_BG : COL_BG;
 
     tft.fillRect(MENU_X + 1, ry, MENU_W - 2, ROW_H - 1, bg);
 
     tft.setTextColor(COL_TEXT, bg);
-    tft.setCursor(LABEL_X, ry + 6);  // Adjust cursor for smaller row height
+    tft.setCursor(LABEL_X, ry + 6);
     tft.setFont(nullptr);
     tft.setTextSize(1);
 
+    // Category name
+    tft.print(CATEGORY_NAMES[row]);
+
+    // Right arrow indicator
+    tft.setTextColor(COL_VALUE, bg);
+    tft.setCursor(MENU_X + MENU_W - 25, ry + 6);
+    tft.print("→");
+}
+
+// Draw a setting row within a category
+static void menuDrawSettingRow(int row, bool selected, int category) {
+    int ry = FIRST_ROW_Y + row * ROW_H;
+    uint32_t bg = selected ? COL_SEL_BG : COL_BG;
+
+    tft.fillRect(MENU_X + 1, ry, MENU_W - 2, ROW_H - 1, bg);
+
+    tft.setTextColor(COL_TEXT, bg);
+    tft.setCursor(LABEL_X, ry + 6);
+    tft.setFont(nullptr);
+    tft.setTextSize(1);
+
+    // Map category and row to original setting indices
+    int settingRow;
+    if (category == 0) { // Display
+        settingRow = 0;  // Font
+    } else { // Serial
+        settingRow = row + 1;  // Baud, Data, Stop, Parity, XON/XOFF
+    }
+
     // Label
-    switch (row) {
-        case 0: tft.print("Font");   break;
+    switch (settingRow) {
+        case 0: tft.print("Font");        break;
         case 1: tft.print("Baud Rate");   break;
         case 2: tft.print("Data Bits");   break;
         case 3: tft.print("Stop Bits");   break;
@@ -94,8 +132,8 @@ static void menuDrawRow(int row, bool selected) {
 
     // Value
     tft.setTextColor(COL_VALUE, bg);
-    tft.setCursor(VALUE_X, ry + 6);  // Adjust cursor for smaller row height
-    switch (row) {
+    tft.setCursor(VALUE_X, ry + 6);
+    switch (settingRow) {
         case 0:
             if (FONT_SIZES[termConfig.fontSizeIndex] == 0) {
                 tft.print("TomThumb");
@@ -119,38 +157,79 @@ static void menuDrawRow(int row, bool selected) {
     // Arrow hints on selected row
     if (selected) {
         tft.setTextColor(COL_HINT, bg);
-        tft.setCursor(MENU_X + MENU_W - 25, ry + 6);  // Tighter spacing
+        tft.setCursor(MENU_X + MENU_W - 25, ry + 6);
         tft.print("< >");
     }
 }
 
-static void menuDraw() {
+// Draw main category menu
+static void drawMainMenu() {
     // Outer border
     tft.drawRect(MENU_X - 1, MENU_Y - 1, MENU_W + 2, MENU_H + 2, COL_BORDER);
     tft.fillRect(MENU_X, MENU_Y, MENU_W, MENU_H, COL_BG);
 
     // Title bar
-    tft.fillRect(MENU_X, MENU_Y, MENU_W, 28, COL_TITLE_BG);  // Smaller title bar
+    tft.fillRect(MENU_X, MENU_Y, MENU_W, 28, COL_TITLE_BG);
     tft.setFont(nullptr);
     tft.setTextSize(1);
     tft.setTextColor(COL_TEXT, COL_TITLE_BG);
-    tft.setCursor(MENU_X + 8, MENU_Y + 10);  // Tighter spacing
-    tft.print("Settings");  // Shorter title
+    tft.setCursor(MENU_X + 8, MENU_Y + 10);
+    tft.print("Settings");
 
     // Divider
     tft.drawFastHLine(MENU_X, MENU_Y + 28, MENU_W, COL_BORDER);
 
-    // Rows
-    for (int i = 0; i < MENU_ROWS; i++) {
-        menuDrawRow(i, i == menuSelectedRow);
+    // Category rows
+    for (int i = 0; i < CATEGORY_COUNT; i++) {
+        menuDrawCategoryRow(i, i == selectedCategory);
     }
 
     // Bottom hint
     int hintY = MENU_Y + MENU_H - 16;
-    tft.fillRect(MENU_X, hintY, MENU_W, 16, COL_TITLE_BG);  // Slightly larger hint area
+    tft.fillRect(MENU_X, hintY, MENU_W, 16, COL_TITLE_BG);
     tft.setTextColor(COL_HINT, COL_TITLE_BG);
     tft.setCursor(MENU_X + 4, hintY + 4);
-    tft.print("W/S:nav A/D:chg ENT:ok");  // Updated to show ENTER saves
+    tft.print("W/S:nav ENT:select ESC:exit");
+}
+
+// Draw category settings menu
+static void drawCategoryMenu(int category) {
+    // Outer border
+    tft.drawRect(MENU_X - 1, MENU_Y - 1, MENU_W + 2, MENU_H + 2, COL_BORDER);
+    tft.fillRect(MENU_X, MENU_Y, MENU_W, MENU_H, COL_BG);
+
+    // Title bar with back arrow
+    tft.fillRect(MENU_X, MENU_Y, MENU_W, 28, COL_TITLE_BG);
+    tft.setFont(nullptr);
+    tft.setTextSize(1);
+    tft.setTextColor(COL_TEXT, COL_TITLE_BG);
+    tft.setCursor(MENU_X + 8, MENU_Y + 10);
+    tft.print("← ");
+    tft.print(CATEGORY_NAMES[category]);
+
+    // Divider
+    tft.drawFastHLine(MENU_X, MENU_Y + 28, MENU_W, COL_BORDER);
+
+    // Setting rows for this category
+    int settingCount = CATEGORY_SETTINGS_COUNT[category];
+    for (int i = 0; i < settingCount; i++) {
+        menuDrawSettingRow(i, i == selectedSetting, category);
+    }
+
+    // Bottom hint
+    int hintY = MENU_Y + MENU_H - 16;
+    tft.fillRect(MENU_X, hintY, MENU_W, 16, COL_TITLE_BG);
+    tft.setTextColor(COL_HINT, COL_TITLE_BG);
+    tft.setCursor(MENU_X + 4, hintY + 4);
+    tft.print("W/S:nav A/D:chg ESC:back ENT:save");
+}
+
+static void menuDraw() {
+    if (currentMenuLevel == MENU_TOP) {
+        drawMainMenu();
+    } else {
+        drawCategoryMenu(selectedCategory);
+    }
 }
 
 // Apply the current settings to the serial port and persist to NVS
@@ -211,7 +290,9 @@ static void menuApplySettings() {
 // Call from the key handler when Fn+ESC is pressed
 static void configMenuOpen() {
     menuActive = true;
-    menuSelectedRow = 0;
+    currentMenuLevel = MENU_TOP;
+    selectedCategory = 0;
+    selectedSetting = 0;
     menuDraw();
 }
 
@@ -220,46 +301,85 @@ static void configMenuOpen() {
 static bool configMenuHandleKey(char c, bool fnKey) {
     if (!menuActive) return false;
 
-    if (c == 5 /* ESC */ || c == '\n' /* ENTER */) {
-        // ESC or ENTER: apply and close
-        menuApplySettings();
-        menuActive = false;
-        // Force full terminal redraw
-        return true;
-    }
-
     bool changed = false;
-    switch (c) {
-        case 'w': case 'W':  // up
-            menuSelectedRow = (menuSelectedRow + MENU_ROWS - 1) % MENU_ROWS;
+
+    if (currentMenuLevel == MENU_TOP) {
+        // Top level navigation
+        if (c == 5 /* ESC */) {
+            // ESC: apply and close
+            menuApplySettings();
+            menuActive = false;
+            return true;
+        } else if (c == '\n' /* ENTER */) {
+            // ENTER: dive into selected category
+            currentMenuLevel = MENU_CATEGORY;
+            selectedSetting = 0;
             changed = true;
-            break;
-        case 's': case 'S':  // down
-            menuSelectedRow = (menuSelectedRow + 1) % MENU_ROWS;
-            changed = true;
-            break;
-        case 'a': case 'A':  // left (decrement)
-            switch (menuSelectedRow) {
-                case 0: termConfig.fontSizeIndex = (termConfig.fontSizeIndex + FONT_SIZE_COUNT - 1) % FONT_SIZE_COUNT; break;
-                case 1: termConfig.baudIndex     = (termConfig.baudIndex + BAUD_COUNT - 1) % BAUD_COUNT; break;
-                case 2: termConfig.dataBits      = max(5, termConfig.dataBits - 1); break;
-                case 3: termConfig.stopBits      = max(1, termConfig.stopBits - 1); break;
-                case 4: termConfig.parityIndex   = (termConfig.parityIndex + 2) % 3; break;
-                case 5: termConfig.xonXoff       = !termConfig.xonXoff; break;
+        } else {
+            switch (c) {
+                case 'w': case 'W':  // up
+                    selectedCategory = (selectedCategory + CATEGORY_COUNT - 1) % CATEGORY_COUNT;
+                    changed = true;
+                    break;
+                case 's': case 'S':  // down
+                    selectedCategory = (selectedCategory + 1) % CATEGORY_COUNT;
+                    changed = true;
+                    break;
             }
+        }
+    } else {
+        // Category level navigation
+        if (c == 5 /* ESC */) {
+            // ESC: return to top level
+            currentMenuLevel = MENU_TOP;
             changed = true;
-            break;
-        case 'd': case 'D':  // right (increment)
-            switch (menuSelectedRow) {
-                case 0: termConfig.fontSizeIndex = (termConfig.fontSizeIndex + 1) % FONT_SIZE_COUNT; break;
-                case 1: termConfig.baudIndex     = (termConfig.baudIndex + 1) % BAUD_COUNT; break;
-                case 2: termConfig.dataBits      = min(8, termConfig.dataBits + 1); break;
-                case 3: termConfig.stopBits      = min(2, termConfig.stopBits + 1); break;
-                case 4: termConfig.parityIndex   = (termConfig.parityIndex + 1) % 3; break;
-                case 5: termConfig.xonXoff       = !termConfig.xonXoff; break;
+        } else if (c == '\n' /* ENTER */) {
+            // ENTER: apply and close
+            menuApplySettings();
+            menuActive = false;
+            return true;
+        } else {
+            int settingCount = CATEGORY_SETTINGS_COUNT[selectedCategory];
+            switch (c) {
+                case 'w': case 'W':  // up
+                    selectedSetting = (selectedSetting + settingCount - 1) % settingCount;
+                    changed = true;
+                    break;
+                case 's': case 'S':  // down
+                    selectedSetting = (selectedSetting + 1) % settingCount;
+                    changed = true;
+                    break;
+                case 'a': case 'A':  // left (decrement)
+                    // Map category and setting to original setting index
+                    if (selectedCategory == 0) { // Display
+                        termConfig.fontSizeIndex = (termConfig.fontSizeIndex + FONT_SIZE_COUNT - 1) % FONT_SIZE_COUNT;
+                    } else { // Serial
+                        switch (selectedSetting) {
+                            case 0: termConfig.baudIndex     = (termConfig.baudIndex + BAUD_COUNT - 1) % BAUD_COUNT; break;
+                            case 1: termConfig.dataBits      = max(5, termConfig.dataBits - 1); break;
+                            case 2: termConfig.stopBits      = max(1, termConfig.stopBits - 1); break;
+                            case 3: termConfig.parityIndex   = (termConfig.parityIndex + 2) % 3; break;
+                            case 4: termConfig.xonXoff       = !termConfig.xonXoff; break;
+                        }
+                    }
+                    changed = true;
+                    break;
+                case 'd': case 'D':  // right (increment)
+                    if (selectedCategory == 0) { // Display
+                        termConfig.fontSizeIndex = (termConfig.fontSizeIndex + 1) % FONT_SIZE_COUNT;
+                    } else { // Serial
+                        switch (selectedSetting) {
+                            case 0: termConfig.baudIndex     = (termConfig.baudIndex + 1) % BAUD_COUNT; break;
+                            case 1: termConfig.dataBits      = min(8, termConfig.dataBits + 1); break;
+                            case 2: termConfig.stopBits      = min(2, termConfig.stopBits + 1); break;
+                            case 3: termConfig.parityIndex   = (termConfig.parityIndex + 1) % 3; break;
+                            case 4: termConfig.xonXoff       = !termConfig.xonXoff; break;
+                        }
+                    }
+                    changed = true;
+                    break;
             }
-            changed = true;
-            break;
+        }
     }
 
     if (changed) {
